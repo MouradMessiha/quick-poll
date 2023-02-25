@@ -186,42 +186,57 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   "view_your_votes", // action_id
   async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
-    const uuid: string = body.message?.metadata?.event_payload?.uuid;
-    const user_id = body.user.id;
-    const user_hash = hashUserID(body.user.id);
+    const isVoteClosed = body.message?.metadata?.event_payload?.isPollClosed;
+    if (isVoteClosed) {
+      const title = body.message?.metadata?.event_payload?.title;
+      const options = body.message?.metadata?.event_payload?.items;
+      const statistics = body.message?.metadata?.event_payload?.statistics;
+      const blocks = messageBlocks(title, options, statistics, isVoteClosed);
 
-    const responseHashVotes = await client.apps.datastore.get({
-      datastore: "vote_detail",
-      id: uuid + "_" + user_hash,
-    });
-    if (responseHashVotes.ok) {
-      const hashVotes = responseHashVotes.item.user_ids || "";
-      const selected_items = allUserItems(hashVotes, user_id);
-      const selected_items_set = new Set(selected_items);
-      const blocks = modalBlocks(
-        body.message?.metadata?.event_payload?.items,
-        selected_items_set,
-      );
-      await client.views.open({
-        interactivity_pointer: body.interactivity.interactivity_pointer,
-        view: {
-          "type": "modal",
-          "title": {
-            "type": "plain_text",
-            "text": "Your votes",
-            "emoji": true,
-          },
-          "close": {
-            "type": "plain_text",
-            "text": "Close",
-            "emoji": true,
-          },
-          "callback_id": "your_votes",
-          "private_metadata": body.container.message_ts + "|" + uuid + "|" +
-            body.message?.metadata?.event_payload?.title,
-          "blocks": blocks,
-        },
+      await client.chat.update({
+        channel: inputs.channel_id,
+        ts: body.container.message_ts,
+        blocks: blocks,
       });
+    } else {
+      const uuid: string = body.message?.metadata?.event_payload?.uuid;
+      const user_id = body.user.id;
+      const user_hash = hashUserID(body.user.id);
+
+      const responseHashVotes = await client.apps.datastore.get({
+        datastore: "vote_detail",
+        id: uuid + "_" + user_hash,
+      });
+      if (responseHashVotes.ok) {
+        const hashVotes = responseHashVotes.item.user_ids || "";
+        const selected_items = allUserItems(hashVotes, user_id);
+        const selected_items_set = new Set(selected_items);
+
+        const blocks = modalBlocks(
+          body.message?.metadata?.event_payload?.items,
+          selected_items_set,
+        );
+        await client.views.open({
+          interactivity_pointer: body.interactivity.interactivity_pointer,
+          view: {
+            "type": "modal",
+            "title": {
+              "type": "plain_text",
+              "text": "Your votes",
+              "emoji": true,
+            },
+            "close": {
+              "type": "plain_text",
+              "text": "Close",
+              "emoji": true,
+            },
+            "callback_id": "your_votes",
+            "private_metadata": body.container.message_ts + "|" + uuid + "|" +
+              body.message?.metadata?.event_payload?.title,
+            "blocks": blocks,
+          },
+        });
+      }
     }
   },
 ).addBlockActionsHandler(
@@ -412,7 +427,7 @@ export default SlackFunction(
   "close_poll", // action_id
   async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
     const eventPayload = JSON.parse(body.view.private_metadata);
-    eventPayload.isClosed = true;
+    eventPayload.isPollClosed = true;
     const uuid = eventPayload.uuid;
 
     // get vote statistics
@@ -424,6 +439,7 @@ export default SlackFunction(
     });
     if (responseAllVotes.ok) {
       const statistics = voteStatistics(responseAllVotes.items);
+      eventPayload.statistics = statistics;
       const messageTimestamp = Number(eventPayload.messageTimestamp);
       const title = eventPayload.title;
       const options = eventPayload.items;
@@ -686,20 +702,22 @@ function messageBlocks(
     ],
   });
 
-  blocks.push({
-    type: "actions",
-    elements: [
-      {
-        type: "button",
-        text: {
-          type: "plain_text",
-          text: "View your votes",
-          emoji: true,
+  if (!isPollClosed) {
+    blocks.push({
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "View your votes",
+            emoji: true,
+          },
+          action_id: "view_your_votes",
         },
-        action_id: "view_your_votes",
-      },
-    ],
-  });
+      ],
+    });
+  }
 
   return blocks;
 }
