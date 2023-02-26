@@ -89,14 +89,13 @@ export default SlackFunction(
   async ({ inputs, client, body, view }) => {
     const uuid = inputs.creator_user_id + Date.now();
 
-    // await client.apps.datastore.put({
-    //   datastore: "vote_header",
-    //   item: {
-    //     id: uuid,
-    //     description: view.state.values.description["description-action"].value,
-    //     creator_user_id: inputs.creator_user_id,
-    //   },
-    // });
+    await client.apps.datastore.put({
+      datastore: "vote_header",
+      item: {
+        id: uuid,
+        is_vote_closed: false,
+      },
+    });
 
     const title = view.state.values.description["description-action"].value
       .trim();
@@ -127,6 +126,20 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   /toggle_.*/, // action_id
   async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
+    const isVoteClosed = body.message?.metadata?.event_payload?.isPollClosed;
+    if (isVoteClosed) {
+      const title = body.message?.metadata?.event_payload?.title;
+      const options = body.message?.metadata?.event_payload?.items;
+      const statistics = body.message?.metadata?.event_payload?.statistics;
+      const blocks = messageBlocks(title, options, statistics, isVoteClosed);
+
+      await client.chat.update({
+        channel: inputs.channel_id,
+        ts: body.container.message_ts,
+        blocks: blocks,
+      });
+      return;
+    }
     const item_index = Number(action.action_id.replace("toggle_", ""));
     const uuid: string = body.message?.metadata?.event_payload?.uuid;
     const item_text: string =
@@ -242,12 +255,53 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   /vote_.*/, // action_id
   async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
+    const uuid = body.view.private_metadata.split("|")[1];
+
+    // check if vote is closed
+    const responseVoteHeader = await client.apps.datastore.get({
+      datastore: "vote_header",
+      id: uuid,
+    });
+    if (responseVoteHeader.ok) {
+      const isVoteClosed = responseVoteHeader.item.is_vote_closed === undefined
+        ? true
+        : responseVoteHeader.item.is_vote_closed;
+      if (isVoteClosed) {
+        await client.views.update({
+          interactivity_pointer: body.interactivity.interactivity_pointer,
+          view_id: body.view.id,
+          view: {
+            "type": "modal",
+            "title": {
+              "type": "plain_text",
+              "text": "Your votes",
+              "emoji": true,
+            },
+            "close": {
+              "type": "plain_text",
+              "text": "Close",
+              "emoji": true,
+            },
+            "callback_id": "your_votes",
+            "blocks": [{
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: "Poll closed :lock:",
+              },
+            }],
+          },
+        });
+
+        return;
+      }
+    }
+
     const isVoteYes = action.action_id.startsWith("vote_yes_");
     const suffix = action.action_id
       .replace("vote_yes_", "")
       .replace("vote_no_", "");
     const item_index = Number(suffix);
-    const uuid = body.view.private_metadata.split("|")[1];
     // deno-lint-ignore no-explicit-any
     const options = body.view.blocks.map((block: any) => block.text.text);
     const item_text = options[item_index - 1];
@@ -385,6 +439,16 @@ export default SlackFunction(
   "delete_poll", // action_id
   async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
     const eventPayload = JSON.parse(body.view.private_metadata);
+
+    const uuid = eventPayload.uuid;
+    await client.apps.datastore.put({
+      datastore: "vote_header",
+      item: {
+        id: uuid,
+        is_vote_closed: true,
+      },
+    });
+
     const messageTimestamp = Number(eventPayload.messageTimestamp);
     await client.chat.delete({
       channel: inputs.channel_id,
@@ -416,19 +480,20 @@ export default SlackFunction(
         }],
       },
     });
-
-    const outputs = {};
-    await client.functions.completeSuccess({
-      function_execution_id: body.function_data.execution_id,
-      outputs,
-    });
   },
 ).addBlockActionsHandler(
   "close_poll", // action_id
   async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
     const eventPayload = JSON.parse(body.view.private_metadata);
-    eventPayload.isPollClosed = true;
     const uuid = eventPayload.uuid;
+
+    await client.apps.datastore.put({
+      datastore: "vote_header",
+      item: {
+        id: uuid,
+        is_vote_closed: true,
+      },
+    });
 
     // get vote statistics
     const responseAllVotes = await client.apps.datastore.query({
@@ -444,6 +509,7 @@ export default SlackFunction(
       const title = eventPayload.title;
       const options = eventPayload.items;
       const blocks = messageBlocks(title, options, statistics, true);
+      eventPayload.isPollClosed = true;
 
       await client.chat.update({
         channel: inputs.channel_id,
@@ -489,10 +555,9 @@ export default SlackFunction(
           }).join("");
       }).join("\n");
 
-      await client.chat.postEphemeral({
-        channel: inputs.channel_id,
+      await client.chat.postMessage({
+        channel: inputs.creator_user_id,
         text: resultsMessage,
-        user: body.user.id,
       });
     }
   },

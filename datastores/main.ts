@@ -26,6 +26,15 @@ import { DefineDatastore, Schema } from "deno-slack-sdk/mod.ts";
 //   },
 // });
 
+export const VoteHeaderDatastore = DefineDatastore({
+  name: "vote_header",
+  primary_key: "id",
+  attributes: {
+    id: { type: Schema.types.string },
+    is_vote_closed: { type: Schema.types.boolean },
+  },
+});
+
 export const VoteDetailDatastore = DefineDatastore({
   name: "vote_detail",
   primary_key: "id",
