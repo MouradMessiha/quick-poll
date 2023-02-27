@@ -138,7 +138,7 @@ export default SlackFunction(
   },
 ).addBlockActionsHandler(
   "view_your_votes", // action_id
-  async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
+  async ({ body, inputs, client }) => { // The second argument is the handler function itself
     const isVoteClosed = body.message?.metadata?.event_payload?.isPollClosed;
     if (isVoteClosed) {
       const title = body.message?.metadata?.event_payload?.title;
@@ -348,7 +348,7 @@ export default SlackFunction(
   },
 ).addBlockActionsHandler(
   "menu", // action_id
-  async ({ body, action, inputs, client }) => { // The second argument is the handler function itself;
+  async ({ body, inputs, client }) => { // The second argument is the handler function itself;
     if (body.message?.metadata?.event_payload) {
       body.message.metadata.event_payload.messageTimestamp =
         body.container.message_ts;
@@ -377,7 +377,7 @@ export default SlackFunction(
   },
 ).addBlockActionsHandler(
   "delete_poll", // action_id
-  async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
+  async ({ body, inputs, client }) => { // The second argument is the handler function itself
     const eventPayload = JSON.parse(body.view.private_metadata);
 
     const uuid = eventPayload.uuid;
@@ -423,7 +423,7 @@ export default SlackFunction(
   },
 ).addBlockActionsHandler(
   "close_poll", // action_id
-  async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
+  async ({ body, inputs, client }) => { // The second argument is the handler function itself
     const eventPayload = JSON.parse(body.view.private_metadata);
     const uuid = eventPayload.uuid;
 
