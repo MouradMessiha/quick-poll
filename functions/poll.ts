@@ -51,9 +51,6 @@ export default SlackFunction(
       metadata: {
         event_type: "quick_poll",
         event_payload: {
-          uuid: inputs.uuid,
-          title: inputs.title,
-          items: inputs.options,
           isPollClosed: false,
         },
       },
@@ -68,10 +65,13 @@ export default SlackFunction(
   async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
     const isVoteClosed = body.message?.metadata?.event_payload?.isPollClosed;
     if (isVoteClosed) {
-      const title = body.message?.metadata?.event_payload?.title;
-      const options = body.message?.metadata?.event_payload?.items;
       const statistics = body.message?.metadata?.event_payload?.statistics;
-      const blocks = messageBlocks(title, options, statistics, isVoteClosed);
+      const blocks = messageBlocks(
+        inputs.title,
+        inputs.options,
+        statistics,
+        isVoteClosed,
+      );
 
       await client.chat.update({
         channel: inputs.channel_id,
@@ -81,14 +81,12 @@ export default SlackFunction(
       return;
     }
     const item_index = Number(action.action_id.replace("toggle_", ""));
-    const uuid: string = body.message?.metadata?.event_payload?.uuid;
-    const item_text: string =
-      body.message?.metadata?.event_payload?.items[item_index - 1];
+    const item_text: string = inputs.options[item_index - 1];
     const user_hash = hashUserID(body.user.id);
 
     const responseHashVotes = await client.apps.datastore.get({
       datastore: "vote_detail",
-      id: uuid + "_" + user_hash,
+      id: inputs.uuid + "_" + user_hash,
     });
     if (responseHashVotes.ok) {
       let confirmationMessage = "";
@@ -105,8 +103,8 @@ export default SlackFunction(
       await client.apps.datastore.put({
         datastore: "vote_detail",
         item: {
-          id: uuid + "_" + user_hash,
-          vote_id: uuid,
+          id: inputs.uuid + "_" + user_hash,
+          vote_id: inputs.uuid,
           user_ids: newHashVotes,
         },
       });
@@ -115,13 +113,16 @@ export default SlackFunction(
         datastore: "vote_detail",
         expression: "#vote_id = :search_id",
         expression_attributes: { "#vote_id": "vote_id" },
-        expression_values: { ":search_id": uuid },
+        expression_values: { ":search_id": inputs.uuid },
       });
       if (responseAllVotes.ok) {
         const statistics = voteStatistics(responseAllVotes.items);
-        const title = body.message?.metadata?.event_payload?.title;
-        const options = body.message?.metadata?.event_payload?.items;
-        const blocks = messageBlocks(title, options, statistics, false);
+        const blocks = messageBlocks(
+          inputs.title,
+          inputs.options,
+          statistics,
+          false,
+        );
 
         await client.chat.update({
           channel: inputs.channel_id,
@@ -141,10 +142,13 @@ export default SlackFunction(
   async ({ body, inputs, client }) => { // The second argument is the handler function itself
     const isVoteClosed = body.message?.metadata?.event_payload?.isPollClosed;
     if (isVoteClosed) {
-      const title = body.message?.metadata?.event_payload?.title;
-      const options = body.message?.metadata?.event_payload?.items;
       const statistics = body.message?.metadata?.event_payload?.statistics;
-      const blocks = messageBlocks(title, options, statistics, isVoteClosed);
+      const blocks = messageBlocks(
+        inputs.title,
+        inputs.options,
+        statistics,
+        isVoteClosed,
+      );
 
       await client.chat.update({
         channel: inputs.channel_id,
@@ -152,13 +156,12 @@ export default SlackFunction(
         blocks: blocks,
       });
     } else {
-      const uuid: string = body.message?.metadata?.event_payload?.uuid;
       const user_id = body.user.id;
       const user_hash = hashUserID(body.user.id);
 
       const responseHashVotes = await client.apps.datastore.get({
         datastore: "vote_detail",
-        id: uuid + "_" + user_hash,
+        id: inputs.uuid + "_" + user_hash,
       });
       if (responseHashVotes.ok) {
         const hashVotes = responseHashVotes.item.user_ids || "";
@@ -166,7 +169,7 @@ export default SlackFunction(
         const selected_items_set = new Set(selected_items);
 
         const blocks = modalBlocks(
-          body.message?.metadata?.event_payload?.items,
+          inputs.options,
           selected_items_set,
         );
         await client.views.open({
@@ -184,8 +187,7 @@ export default SlackFunction(
               "emoji": true,
             },
             "callback_id": "your_votes",
-            "private_metadata": body.container.message_ts + "|" + uuid + "|" +
-              body.message?.metadata?.event_payload?.title,
+            "private_metadata": body.container.message_ts,
             "blocks": blocks,
           },
         });
@@ -195,12 +197,10 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   /vote_.*/, // action_id
   async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
-    const uuid = body.view.private_metadata.split("|")[1];
-
     // check if vote is closed
     const responseVoteHeader = await client.apps.datastore.get({
       datastore: "vote_header",
-      id: uuid,
+      id: inputs.uuid,
     });
     if (responseVoteHeader.ok) {
       const isVoteClosed = responseVoteHeader.item.is_vote_closed === undefined
@@ -242,14 +242,12 @@ export default SlackFunction(
       .replace("vote_yes_", "")
       .replace("vote_no_", "");
     const item_index = Number(suffix);
-    // deno-lint-ignore no-explicit-any
-    const options = body.view.blocks.map((block: any) => block.text.text);
-    const item_text = options[item_index - 1];
+    const item_text = inputs.options[item_index - 1];
     const user_hash = hashUserID(body.user.id);
 
     const responseHashVotes = await client.apps.datastore.get({
       datastore: "vote_detail",
-      id: uuid + "_" + user_hash,
+      id: inputs.uuid + "_" + user_hash,
     });
     if (responseHashVotes.ok) {
       const hashVotes = responseHashVotes.item.user_ids || "";
@@ -263,73 +261,57 @@ export default SlackFunction(
       await client.apps.datastore.put({
         datastore: "vote_detail",
         item: {
-          id: uuid + "_" + user_hash,
-          vote_id: uuid,
+          id: inputs.uuid + "_" + user_hash,
+          vote_id: inputs.uuid,
           user_ids: newHashVotes,
         },
       });
-    }
 
-    // Update the modal
-    // deno-lint-ignore no-explicit-any
-    const new_blocks = body.view.blocks.map((block: any) => {
-      if (block.accessory !== undefined) {
-        const blockIndex = Number(block.accessory.action_id.split("_")[2]);
-        return {
-          ...block,
-          accessory: {
-            ...block.accessory,
-            text: {
-              ...block.accessory.text,
-              text: blockIndex === item_index
-                ? isVoteYes ? " :white_check_mark:" : getEmoji(blockIndex)
-                : block.accessory.text.text,
-            },
-            action_id: (blockIndex === item_index
-              ? ((isVoteYes ? "vote_no_" : "vote_yes_") + "_" + item_index)
-              : block.accessory.action_id),
+      // Update the modal
+      const selected_items = allUserItems(newHashVotes, body.user.id);
+      const selected_items_set = new Set(selected_items);
+      const blocks = modalBlocks(
+        inputs.options,
+        selected_items_set,
+      );
+      await client.views.update({
+        interactivity_pointer: body.interactivity.interactivity_pointer,
+        view_id: body.view.id,
+        view: {
+          "type": "modal",
+          "title": {
+            "type": "plain_text",
+            "text": "Your votes",
+            "emoji": true,
           },
-        };
-      }
-      return block;
-    });
-
-    await client.views.update({
-      interactivity_pointer: body.interactivity.interactivity_pointer,
-      view_id: body.view.id,
-      view: {
-        "type": "modal",
-        "title": {
-          "type": "plain_text",
-          "text": "Your votes",
-          "emoji": true,
+          "close": {
+            "type": "plain_text",
+            "text": "Close",
+            "emoji": true,
+          },
+          "callback_id": "your_votes",
+          "private_metadata": body.view.private_metadata,
+          "blocks": blocks,
         },
-        "close": {
-          "type": "plain_text",
-          "text": "Close",
-          "emoji": true,
-        },
-        "callback_id": "your_votes",
-        "private_metadata": body.view.private_metadata,
-        "blocks": new_blocks,
-      },
-    });
+      });
+    }
 
     // get vote statistics
     const responseAllVotes = await client.apps.datastore.query({
       datastore: "vote_detail",
       expression: "#vote_id = :search_id",
       expression_attributes: { "#vote_id": "vote_id" },
-      expression_values: { ":search_id": uuid },
+      expression_values: { ":search_id": inputs.uuid },
     });
     if (responseAllVotes.ok) {
       const statistics = voteStatistics(responseAllVotes.items);
-      const messageTimestamp = Number(body.view.private_metadata.split("|")[0]);
-      const title = body.view.private_metadata.replace(
-        messageTimestamp + "|" + uuid + "|",
-        "",
+      const messageTimestamp = Number(body.view.private_metadata);
+      const blocks = messageBlocks(
+        inputs.title,
+        inputs.options,
+        statistics,
+        false,
       );
-      const blocks = messageBlocks(title, options, statistics, false);
       await client.chat.update({
         channel: inputs.channel_id,
         ts: messageTimestamp,
@@ -349,10 +331,6 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   "menu", // action_id
   async ({ body, inputs, client }) => { // The second argument is the handler function itself;
-    if (body.message?.metadata?.event_payload) {
-      body.message.metadata.event_payload.messageTimestamp =
-        body.container.message_ts;
-    }
     await client.views.open({
       interactivity_pointer: body.interactivity.interactivity_pointer,
       view: {
@@ -368,9 +346,7 @@ export default SlackFunction(
           "emoji": true,
         },
         "callback_id": "menu_options",
-        "private_metadata": JSON.stringify(
-          body.message?.metadata?.event_payload,
-        ),
+        "private_metadata": body.container.message_ts,
         "blocks": menuOptionsBlocks(inputs.creator_user_id, body.user.id),
       },
     });
@@ -378,18 +354,15 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   "delete_poll", // action_id
   async ({ body, inputs, client }) => { // The second argument is the handler function itself
-    const eventPayload = JSON.parse(body.view.private_metadata);
-
-    const uuid = eventPayload.uuid;
     await client.apps.datastore.put({
       datastore: "vote_header",
       item: {
-        id: uuid,
+        id: inputs.uuid,
         is_vote_closed: true,
       },
     });
 
-    const messageTimestamp = Number(eventPayload.messageTimestamp);
+    const messageTimestamp = Number(body.view.private_metadata);
     await client.chat.delete({
       channel: inputs.channel_id,
       ts: messageTimestamp,
@@ -420,17 +393,16 @@ export default SlackFunction(
         }],
       },
     });
+
+    // don't complete the function, some users may have an open modal
   },
 ).addBlockActionsHandler(
   "close_poll", // action_id
   async ({ body, inputs, client }) => { // The second argument is the handler function itself
-    const eventPayload = JSON.parse(body.view.private_metadata);
-    const uuid = eventPayload.uuid;
-
     await client.apps.datastore.put({
       datastore: "vote_header",
       item: {
-        id: uuid,
+        id: inputs.uuid,
         is_vote_closed: true,
       },
     });
@@ -440,16 +412,18 @@ export default SlackFunction(
       datastore: "vote_detail",
       expression: "#vote_id = :search_id",
       expression_attributes: { "#vote_id": "vote_id" },
-      expression_values: { ":search_id": uuid },
+      expression_values: { ":search_id": inputs.uuid },
     });
     if (responseAllVotes.ok) {
       const statistics = voteStatistics(responseAllVotes.items);
-      eventPayload.statistics = statistics;
-      const messageTimestamp = Number(eventPayload.messageTimestamp);
-      const title = eventPayload.title;
-      const options = eventPayload.items;
-      const blocks = messageBlocks(title, options, statistics, true);
-      eventPayload.isPollClosed = true;
+      const eventPayload = { statistics, isPollClosed: true };
+      const messageTimestamp = Number(body.view.private_metadata);
+      const blocks = messageBlocks(
+        inputs.title,
+        inputs.options,
+        statistics,
+        true,
+      );
 
       await client.chat.update({
         channel: inputs.channel_id,
@@ -487,13 +461,15 @@ export default SlackFunction(
         },
       });
 
-      const resultsMessage = options.map((option: string, index: number) => {
-        const voters = statistics["item_" + (index + 1)] || [];
-        return option + " `" +
-          voters.length + "`\n" + voters.map((voter: string) => {
-            return "<@" + voter + ">";
-          }).join("");
-      }).join("\n");
+      const resultsMessage = inputs.options.map(
+        (option: string, index: number) => {
+          const voters = statistics["item_" + (index + 1)] || [];
+          return option + " `" +
+            voters.length + "`\n" + voters.map((voter: string) => {
+              return "<@" + voter + ">";
+            }).join("");
+        },
+      ).join("\n");
 
       await client.chat.postMessage({
         channel: inputs.creator_user_id,
