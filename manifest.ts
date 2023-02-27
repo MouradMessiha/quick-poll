@@ -7,8 +7,7 @@ import { VoteDetailDatastore } from "./datastores/main.ts";
 
 export default Manifest({
   name: "my-app",
-  description:
-    "A sample that demonstrates using a function, workflow and trigger to send a greeting",
+  description: "An app that handles polls in Slack channels",
   icon: "assets/default_new_app_icon.png",
   workflows: [PollWorkflow],
   outgoingDomains: [],

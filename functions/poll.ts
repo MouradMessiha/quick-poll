@@ -2,22 +2,37 @@ import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
 
 export const PollFunction = DefineFunction({
   callback_id: "poll_function",
-  title: "Create a poll",
-  description: "Create a poll in the channel",
+  title: "Handle a poll",
+  description: "Handle a poll in the channel",
   source_file: "functions/poll.ts",
   input_parameters: {
     properties: {
-      interactivity: { // This tells Slack that your function will create interactive elements
-        type: Schema.slack.types.interactivity,
-      },
       channel_id: {
         type: Schema.slack.types.channel_id,
       },
       creator_user_id: {
         type: Schema.slack.types.user_id,
       },
+      uuid: {
+        type: Schema.types.string,
+      },
+      title: {
+        type: Schema.types.string,
+      },
+      options: {
+        type: Schema.types.array,
+        items: {
+          type: Schema.types.string,
+        },
+      },
     },
-    required: ["interactivity", "channel_id", "creator_user_id"],
+    required: [
+      "channel_id",
+      "creator_user_id",
+      "uuid",
+      "title",
+      "options",
+    ],
   },
   output_parameters: {
     properties: {},
@@ -28,86 +43,7 @@ export const PollFunction = DefineFunction({
 export default SlackFunction(
   PollFunction,
   async ({ inputs, client }) => {
-    await client.views.open({
-      interactivity_pointer: inputs.interactivity.interactivity_pointer,
-      view: {
-        "type": "modal",
-        "title": {
-          "type": "plain_text",
-          "text": "Create a poll",
-          "emoji": true,
-        },
-        "submit": {
-          "type": "plain_text",
-          "text": "Submit",
-          "emoji": true,
-        },
-        "close": {
-          "type": "plain_text",
-          "text": "Cancel",
-          "emoji": true,
-        },
-        "callback_id": "create_poll_view",
-        "blocks": [
-          {
-            "type": "input",
-            "block_id": "description",
-            "element": {
-              "type": "plain_text_input",
-              "multiline": true,
-              "action_id": "description-action",
-            },
-            "label": {
-              "type": "plain_text",
-              "text": "Topic",
-              "emoji": true,
-            },
-          },
-          {
-            "type": "input",
-            "block_id": "options",
-            "element": {
-              "type": "plain_text_input",
-              "multiline": true,
-              "action_id": "options-action",
-            },
-            "label": {
-              "type": "plain_text",
-              "text": "Options (one per line)",
-              "emoji": true,
-            },
-          },
-        ],
-      },
-    });
-    return {
-      completed: false,
-    };
-  },
-).addViewSubmissionHandler(
-  "create_poll_view",
-  async ({ inputs, client, body, view }) => {
-    const uuid = inputs.creator_user_id + Date.now();
-
-    await client.apps.datastore.put({
-      datastore: "vote_header",
-      item: {
-        id: uuid,
-        is_vote_closed: false,
-      },
-    });
-
-    const title = view.state.values.description["description-action"].value
-      .trim();
-    const options = view.state.values.options["options-action"].value
-      .split("\n")
-      .map((option: string) => option.trim())
-      .filter((option: string) => option !== "")
-      .map((option: string, index: number) =>
-        getEmoji(index + 1) + " " + option
-      );
-
-    const blocks = messageBlocks(title, options, {}, false);
+    const blocks = messageBlocks(inputs.title, inputs.options, {}, false);
 
     await client.chat.postMessage({
       channel: inputs.channel_id,
@@ -115,13 +51,17 @@ export default SlackFunction(
       metadata: {
         event_type: "quick_poll",
         event_payload: {
-          uuid: uuid,
-          title: title,
-          items: options,
+          uuid: inputs.uuid,
+          title: inputs.title,
+          items: inputs.options,
           isPollClosed: false,
         },
       },
     });
+
+    return {
+      completed: false,
+    };
   },
 ).addBlockActionsHandler(
   /toggle_.*/, // action_id

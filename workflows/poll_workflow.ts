@@ -1,10 +1,11 @@
 import { DefineWorkflow, Schema } from "deno-slack-sdk/mod.ts";
 import { PollFunction } from "../functions/poll.ts";
+import { CreatePoll } from "../functions/create_poll.ts";
 
 const PollWorkflow = DefineWorkflow({
   callback_id: "poll_workflow",
-  title: "Send a greeting",
-  description: "Send a greeting to channel",
+  title: "Poll Workflow",
+  description: "Create a poll in the channel",
   input_parameters: {
     properties: {
       interactivity: {
@@ -21,12 +22,22 @@ const PollWorkflow = DefineWorkflow({
   },
 });
 
+const { outputs } = PollWorkflow.addStep(
+  CreatePoll,
+  {
+    interactivity: PollWorkflow.inputs.interactivity,
+    creator_user_id: PollWorkflow.inputs.creator_user_id,
+  },
+);
+
 PollWorkflow.addStep(
   PollFunction,
   {
-    interactivity: PollWorkflow.inputs.interactivity,
     channel_id: PollWorkflow.inputs.channel,
     creator_user_id: PollWorkflow.inputs.creator_user_id,
+    uuid: outputs.uuid,
+    title: outputs.title,
+    options: outputs.options,
   },
 );
 
