@@ -347,7 +347,11 @@ export default SlackFunction(
         },
         "callback_id": "menu_options",
         "private_metadata": body.container.message_ts,
-        "blocks": menuOptionsBlocks(inputs.creator_user_id, body.user.id),
+        "blocks": menuOptionsBlocks(
+          inputs.creator_user_id,
+          body.user.id,
+          body.message?.metadata?.event_payload?.isPollClosed,
+        ),
       },
     });
   },
@@ -399,83 +403,95 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   "close_poll", // action_id
   async ({ body, inputs, client }) => { // The second argument is the handler function itself
-    await client.apps.datastore.put({
+    // check if vote is closed
+    const responseVoteHeader = await client.apps.datastore.get({
       datastore: "vote_header",
-      item: {
-        id: inputs.uuid,
-        is_vote_closed: true,
+      id: inputs.uuid,
+    });
+    if (responseVoteHeader.ok) {
+      const isVoteClosed = responseVoteHeader.item.is_vote_closed === undefined
+        ? true
+        : responseVoteHeader.item.is_vote_closed;
+      if (!isVoteClosed) {
+        // get vote statistics
+        const responseAllVotes = await client.apps.datastore.query({
+          datastore: "vote_detail",
+          expression: "#vote_id = :search_id",
+          expression_attributes: { "#vote_id": "vote_id" },
+          expression_values: { ":search_id": inputs.uuid },
+        });
+        if (responseAllVotes.ok) {
+          const statistics = voteStatistics(responseAllVotes.items);
+          const eventPayload = { statistics, isPollClosed: true };
+          const messageTimestamp = Number(body.view.private_metadata);
+          const blocks = messageBlocks(
+            inputs.title,
+            inputs.options,
+            statistics,
+            true,
+          );
+
+          await client.chat.update({
+            channel: inputs.channel_id,
+            ts: messageTimestamp,
+            blocks: blocks,
+            metadata: {
+              event_type: "quick_poll",
+              event_payload: eventPayload,
+            },
+          });
+
+          const resultsMessage = inputs.options.map(
+            (option: string, index: number) => {
+              const voters = statistics["item_" + (index + 1)] || [];
+              return option + " `" +
+                voters.length + "`\n" + voters.map((voter: string) => {
+                  return "<@" + voter + ">";
+                }).join("");
+            },
+          ).join("\n");
+
+          await client.chat.postMessage({
+            channel: inputs.creator_user_id,
+            text: resultsMessage,
+          });
+
+          await client.apps.datastore.put({
+            datastore: "vote_header",
+            item: {
+              id: inputs.uuid,
+              is_vote_closed: true,
+            },
+          });
+        }
+      }
+    }
+
+    await client.views.update({
+      interactivity_pointer: body.interactivity.interactivity_pointer,
+      view_id: body.view.id,
+      view: {
+        "type": "modal",
+        "title": {
+          "type": "plain_text",
+          "text": "Options",
+          "emoji": true,
+        },
+        "close": {
+          "type": "plain_text",
+          "text": "Close",
+          "emoji": true,
+        },
+        "callback_id": "menu_options",
+        "blocks": [{
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "Poll closed :lock:",
+          },
+        }],
       },
     });
-
-    // get vote statistics
-    const responseAllVotes = await client.apps.datastore.query({
-      datastore: "vote_detail",
-      expression: "#vote_id = :search_id",
-      expression_attributes: { "#vote_id": "vote_id" },
-      expression_values: { ":search_id": inputs.uuid },
-    });
-    if (responseAllVotes.ok) {
-      const statistics = voteStatistics(responseAllVotes.items);
-      const eventPayload = { statistics, isPollClosed: true };
-      const messageTimestamp = Number(body.view.private_metadata);
-      const blocks = messageBlocks(
-        inputs.title,
-        inputs.options,
-        statistics,
-        true,
-      );
-
-      await client.chat.update({
-        channel: inputs.channel_id,
-        ts: messageTimestamp,
-        blocks: blocks,
-        metadata: {
-          event_type: "quick_poll",
-          event_payload: eventPayload,
-        },
-      });
-
-      await client.views.update({
-        interactivity_pointer: body.interactivity.interactivity_pointer,
-        view_id: body.view.id,
-        view: {
-          "type": "modal",
-          "title": {
-            "type": "plain_text",
-            "text": "Options",
-            "emoji": true,
-          },
-          "close": {
-            "type": "plain_text",
-            "text": "Close",
-            "emoji": true,
-          },
-          "callback_id": "menu_options",
-          "blocks": [{
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "Poll closed :lock:",
-            },
-          }],
-        },
-      });
-
-      const resultsMessage = inputs.options.map(
-        (option: string, index: number) => {
-          const voters = statistics["item_" + (index + 1)] || [];
-          return option + " `" +
-            voters.length + "`\n" + voters.map((voter: string) => {
-              return "<@" + voter + ">";
-            }).join("");
-        },
-      ).join("\n");
-
-      await client.chat.postMessage({
-        channel: inputs.creator_user_id,
-        text: resultsMessage,
-      });
-    }
   },
 );
 
@@ -735,10 +751,15 @@ function modalBlocks(
   return blocks;
 }
 
-function menuOptionsBlocks(creatorUser: string, userID: string) {
+function menuOptionsBlocks(
+  creatorUser: string,
+  userID: string,
+  isPollClosed: boolean,
+  // deno-lint-ignore no-explicit-any
+): Array<any> {
   const blocks = [];
 
-  if (creatorUser === userID) {
+  if (creatorUser === userID && !isPollClosed) {
     blocks.push({
       type: "section",
       text: {
@@ -755,7 +776,9 @@ function menuOptionsBlocks(creatorUser: string, userID: string) {
         action_id: "close_poll",
       },
     });
+  }
 
+  if (creatorUser === userID) {
     blocks.push({
       type: "section",
       text: {
