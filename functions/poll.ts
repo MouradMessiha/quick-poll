@@ -797,22 +797,15 @@ function menuOptionsBlocks(
     });
   }
 
-  blocks.push({
-    type: "section",
-    text: {
-      type: "mrkdwn",
-      text: "Create new poll",
-    },
-    accessory: {
-      type: "button",
+  if (creatorUser !== userID) {
+    blocks.push({
+      type: "section",
       text: {
-        type: "plain_text",
-        text: ":new:",
-        emoji: true,
+        type: "mrkdwn",
+        text: "This poll was created by <@" + creatorUser + ">",
       },
-      action_id: "create_new_poll",
-    },
-  });
+    });
+  }
 
   return blocks;
 }
