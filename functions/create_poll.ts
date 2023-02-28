@@ -98,6 +98,36 @@ export default SlackFunction(
 ).addViewSubmissionHandler(
   "create_poll_view",
   async ({ inputs, client, body, view }) => {
+    const title = view.state.values.description["description-action"].value
+      .trim();
+    const options = view.state.values.options["options-action"].value
+      .split("\n")
+      .map((option: string) => option.trim())
+      .filter((option: string) => option !== "")
+      .map((option: string, index: number) =>
+        getEmoji(index + 1) + " " + option
+      );
+    // deno-lint-ignore no-explicit-any
+    const errors: any = {};
+    let hasErrors = false;
+    if (!title) {
+      errors.description = "Please enter a topic";
+      hasErrors = true;
+    }
+    if (options.length > 46) {
+      errors.options = "Too many items, 46 is the max";
+      hasErrors = true;
+    }
+    if (options.length === 0) {
+      errors.options = "Please enter at least one option";
+      hasErrors = true;
+    }
+    if (hasErrors) {
+      return {
+        response_action: "errors",
+        errors: errors,
+      };
+    }
     const uuid = inputs.creator_user_id + Date.now();
 
     await client.apps.datastore.put({
@@ -108,15 +138,6 @@ export default SlackFunction(
       },
     });
 
-    const title = view.state.values.description["description-action"].value
-      .trim();
-    const options = view.state.values.options["options-action"].value
-      .split("\n")
-      .map((option: string) => option.trim())
-      .filter((option: string) => option !== "")
-      .map((option: string, index: number) =>
-        getEmoji(index + 1) + " " + option
-      );
     const outputs = {
       uuid,
       title,
