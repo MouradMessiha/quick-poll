@@ -441,19 +441,9 @@ export default SlackFunction(
             },
           });
 
-          const resultsMessage = inputs.options.map(
-            (option: string, index: number) => {
-              const voters = statistics["item_" + (index + 1)] || [];
-              return option + " `" +
-                voters.length + "`\n" + voters.map((voter: string) => {
-                  return "<@" + voter + ">";
-                }).join("");
-            },
-          ).join("\n");
-
           await client.chat.postMessage({
             channel: inputs.creator_user_id,
-            text: resultsMessage,
+            blocks: resultsBlocks(inputs.title, inputs.options, statistics),
           });
 
           await client.apps.datastore.put({
@@ -804,6 +794,58 @@ function menuOptionsBlocks(
         type: "mrkdwn",
         text: "This poll was created by <@" + creatorUser + ">",
       },
+    });
+  }
+
+  return blocks;
+}
+
+function resultsBlocks(title: string, options: Array<string>, statistics: any) {
+  const blocks = [];
+
+  blocks.push({
+    type: "section",
+    text: {
+      type: "mrkdwn",
+      text: "*Poll closed, here are the results*",
+    },
+  });
+
+  blocks.push({
+    type: "section",
+    text: {
+      type: "mrkdwn",
+      text: title,
+    },
+  });
+
+  blocks.push({
+    type: "divider",
+  });
+
+  for (let i = 0; i < options.length; i++) {
+    const voters = statistics["item_" + (i + 1)] || [];
+    const voterNames = voters.map((voter: string) => {
+      return "<@" + voter + ">";
+    }).join("");
+    const totalVotes = voters.length;
+    const votePlural = totalVotes === 1 ? "vote" : "votes";
+    const voteCount = totalVotes ? `${totalVotes} ${votePlural}` : `no votes`;
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: options[i],
+      },
+    });
+    blocks.push({
+      type: "context",
+      elements: [
+        {
+          type: "mrkdwn",
+          text: "`" + voteCount + "`" + " " + voterNames,
+        },
+      ],
     });
   }
 
