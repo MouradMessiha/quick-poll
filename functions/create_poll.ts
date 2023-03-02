@@ -135,8 +135,6 @@ export default SlackFunction(
       item: {
         id: uuid,
         is_vote_closed: false,
-        title,
-        options: options.join("\n"),
       },
     });
 
