@@ -100,7 +100,7 @@ export default SlackFunction(
   async ({ inputs, client, body, view }) => {
     const title = view.state.values.description["description-action"].value
       .trim();
-    const options = view.state.values.options["options-action"].value
+    const options: string[] = view.state.values.options["options-action"].value
       .split("\n")
       .map((option: string) => option.trim())
       .filter((option: string) => option !== "")
@@ -135,6 +135,8 @@ export default SlackFunction(
       item: {
         id: uuid,
         is_vote_closed: false,
+        title,
+        options: options.join("\n"),
       },
     });
 
