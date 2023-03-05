@@ -26,6 +26,7 @@ const { outputs } = PollWorkflow.addStep(
   CreatePoll,
   {
     interactivity: PollWorkflow.inputs.interactivity,
+    channel_id: PollWorkflow.inputs.channel,
     creator_user_id: PollWorkflow.inputs.creator_user_id,
   },
 );

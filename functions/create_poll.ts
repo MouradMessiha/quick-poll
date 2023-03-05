@@ -8,6 +8,9 @@ export const CreatePoll = DefineFunction({
   source_file: "functions/create_poll.ts",
   input_parameters: {
     properties: {
+      channel_id: {
+        type: Schema.slack.types.channel_id,
+      },
       interactivity: { // This tells Slack that your function will create interactive elements
         type: Schema.slack.types.interactivity,
       },
@@ -15,7 +18,7 @@ export const CreatePoll = DefineFunction({
         type: Schema.slack.types.user_id,
       },
     },
-    required: ["interactivity", "creator_user_id"],
+    required: ["channel_id", "interactivity", "creator_user_id"],
   },
   output_parameters: {
     properties: {
@@ -41,7 +44,7 @@ export default SlackFunction(
   async ({ inputs, client }) => {
     await client.views.open({
       interactivity_pointer: inputs.interactivity.interactivity_pointer,
-      view: viewObject({ "values": {} }),
+      view: viewObject({ "values": {} }, inputs.channel_id),
     });
     return {
       completed: false,
@@ -102,29 +105,42 @@ export default SlackFunction(
   },
 ).addBlockActionsHandler(
   "visibility_selection",
-  async ({ body, client }) => {
+  async ({ body, client, inputs }) => {
     await client.views.update({
       interactivity_pointer: body.interactivity.interactivity_pointer,
       view_id: body.view.id,
-      view: viewObject(body.view.state),
+      view: viewObject(body.view.state, inputs.channel_id),
     });
   },
 ).addBlockActionsHandler(
   "vote_limit_selection",
-  async ({ body, client }) => {
+  async ({ body, client, inputs }) => {
     await client.views.update({
       interactivity_pointer: body.interactivity.interactivity_pointer,
       view_id: body.view.id,
-      view: viewObject(body.view.state),
+      view: viewObject(body.view.state, inputs.channel_id),
     });
   },
 );
 
 // deno-lint-ignore no-explicit-any
-function viewObject(state: any) {
+function viewObject(state: any, channel: string) {
   const blocks = [];
   blocks.push(multiline_input("topic", "topic", "Topic"));
   blocks.push(multiline_input("options", "options", "Options (one per line)"));
+  blocks.push({
+    "type": "input",
+    "block_id": "channel",
+    "label": {
+      "type": "plain_text",
+      "text": "Channel",
+    },
+    "element": {
+      "type": "channels_select",
+      "action_id": "value",
+      "initial_channel": channel,
+    },
+  });
   blocks.push(
     menu_select(
       "names_visibility_during",
