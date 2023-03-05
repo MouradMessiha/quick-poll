@@ -136,9 +136,9 @@ function viewObject(state: any, channel: string) {
       "text": "Channel",
     },
     "element": {
-      "type": "channels_select",
+      "type": "conversations_select",
       "action_id": "value",
-      "initial_channel": channel,
+      "initial_conversation": channel,
     },
   });
   blocks.push(
