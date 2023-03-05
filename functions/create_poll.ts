@@ -50,9 +50,9 @@ export default SlackFunction(
 ).addViewSubmissionHandler(
   "create_poll_view",
   async ({ inputs, client, body, view }) => {
-    const title = view.state.values.topic["topic"].value
+    const title = view.state.values.topic.topic.value
       .trim();
-    const options: string[] = view.state.values.options["options"].value
+    const options: string[] = view.state.values.options.options.value
       .split("\n")
       .map((option: string) => option.trim())
       .filter((option: string) => option !== "")
@@ -101,7 +101,16 @@ export default SlackFunction(
     });
   },
 ).addBlockActionsHandler(
-  "menu_selection",
+  "visibility_selection",
+  async ({ body, client }) => {
+    await client.views.update({
+      interactivity_pointer: body.interactivity.interactivity_pointer,
+      view_id: body.view.id,
+      view: viewObject(body.view.state),
+    });
+  },
+).addBlockActionsHandler(
+  "vote_limit_selection",
   async ({ body, client }) => {
     await client.views.update({
       interactivity_pointer: body.interactivity.interactivity_pointer,
@@ -117,12 +126,11 @@ function viewObject(state: any) {
   blocks.push(multiline_input("topic", "topic", "Topic"));
   blocks.push(multiline_input("options", "options", "Options (one per line)"));
   blocks.push(
-    multi_buttons_input(
+    menu_select(
       "names_visibility_during",
-      "menu_selection",
-      "Names visibility during the poll",
-      "Everyone",
-      "everyone",
+      "visibility_selection",
+      "Names visibile during the poll to",
+      { text: "Everyone", value: "everyone" },
       [
         { text: "Everyone", value: "everyone" },
         { text: "Only me", value: "only_me" },
@@ -130,27 +138,111 @@ function viewObject(state: any) {
       ],
     ),
   );
+  const names_visibility_during =
+    state.values.names_visibility_during?.visibility_selection?.selected_option
+      ?.value || "everyone";
   if (
-    state.values.names_visibility_during &&
-    state.values.names_visibility_during.menu_selection.selected_option
-        .value ===
-      "only_me"
+    names_visibility_during === "only_me" ||
+    names_visibility_during === "no_one"
   ) {
+    const valid_options = [];
+    if (
+      names_visibility_during === "only_me" ||
+      names_visibility_during === "no_one"
+    ) {
+      valid_options.push({ text: "Everyone", value: "everyone" });
+      valid_options.push({ text: "Only me", value: "only_me" });
+    }
+    if (names_visibility_during === "no_one") {
+      valid_options.push({ text: "No one", value: "no_one" });
+    }
+
     blocks.push(
-      multi_buttons_input(
+      menu_select(
         "names_visibility_after",
-        "menu_selection",
-        "Names visibility after the poll is closed",
-        "Everyone",
-        "everyone",
-        [
-          { text: "Everyone", value: "everyone" },
-          { text: "Only me", value: "only_me" },
-          { text: "No one", value: "no_one" },
-        ],
+        "visibility_selection",
+        "Names visibile after the poll is closed to",
+        { text: "Everyone", value: "everyone" },
+        valid_options,
       ),
     );
+
+    blocks.push(
+      menu_select(
+        "counts_visibility_during",
+        "visibility_selection",
+        "Vote counts visibile during the poll to",
+        { text: "Everyone", value: "everyone" },
+        valid_options,
+      ),
+    );
+    const counts_visibility_during =
+      state.values.counts_visibility_during?.visibility_selection
+        ?.selected_option
+        ?.value || "everyone";
+    if (
+      counts_visibility_during === "only_me" ||
+      counts_visibility_during === "no_one"
+    ) {
+      blocks.push(
+        menu_select(
+          "counts_visibility_after",
+          "visibility_selection",
+          "Vote counts visibile after the poll is closed to",
+          { text: "Everyone", value: "everyone" },
+          [
+            { text: "Everyone", value: "everyone" },
+            { text: "Only me", value: "only_me" },
+          ],
+        ),
+      );
+    }
   }
+  blocks.push(
+    menu_select(
+      "votes_per_user",
+      "vote_limit_selection",
+      "Votes per user",
+      { text: "Unlimited", value: "unlimited" },
+      [
+        { text: "Unlimited", value: "unlimited" },
+        { text: "Limited", value: "limited" },
+      ],
+    ),
+  );
+  const votes_per_user =
+    state.values.votes_per_user?.vote_limit_selection?.selected_option?.value ||
+    "unlimited";
+  if (votes_per_user === "limited") {
+    blocks.push({
+      "type": "input",
+      "block_id": "max_votes_per_user",
+      "element": {
+        "type": "number_input",
+        "is_decimal_allowed": false,
+        "initial_value": "1",
+        "min_value": "1",
+        "action_id": "value",
+      },
+      "label": {
+        "type": "plain_text",
+        "text": "Max votes per user",
+      },
+    });
+  }
+  blocks.push({
+    "type": "input",
+    "block_id": "end_date_time",
+    "element": {
+      "type": "datetimepicker",
+      "action_id": "value",
+      "initial_date_time": Math.floor(Date.now() / 1000) + 60 * 60 * 24,
+    },
+    "label": {
+      "type": "plain_text",
+      "text": "Poll end date and time",
+    },
+  });
 
   return {
     "type": "modal",
@@ -187,17 +279,18 @@ function multiline_input(
     "label": {
       "type": "plain_text",
       "text": label,
-      "emoji": true,
     },
   };
 }
 
-function multi_buttons_input(
+function menu_select(
   block_id: string,
   action_id: string,
   label: string,
-  selected_text: string,
-  selected_value: string,
+  initial_option: {
+    text: string;
+    value: string;
+  },
   options: {
     text: string;
     value: string;
@@ -208,34 +301,25 @@ function multi_buttons_input(
     "block_id": block_id,
     "text": {
       "type": "mrkdwn",
-      "text": label,
+      "text": `*${label}*`,
     },
     "accessory": {
       "type": "static_select",
-      "placeholder": {
-        "type": "plain_text",
-        "text": "Select an item",
-        "emoji": true,
-      },
-      "options": options.map((option) => {
-        return {
-          "text": {
-            "type": "plain_text",
-            "text": option.text,
-            "emoji": true,
-          },
-          "value": option.value,
-        };
-      }),
       "action_id": action_id,
-      "initial_option": {
-        "text": {
-          "type": "plain_text",
-          "text": selected_text,
-          "emoji": true,
-        },
-        "value": selected_value,
-      },
+      "initial_option": menu_option(initial_option.text, initial_option.value),
+      "options": options.map(
+        (option) => (menu_option(option.text, option.value)),
+      ),
     },
+  };
+}
+
+function menu_option(text: string, value: string) {
+  return {
+    "text": {
+      "type": "plain_text",
+      "text": text,
+    },
+    "value": value,
   };
 }
