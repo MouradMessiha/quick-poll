@@ -7,9 +7,6 @@ export const PollFunction = DefineFunction({
   source_file: "functions/poll.ts",
   input_parameters: {
     properties: {
-      channel_id: {
-        type: Schema.slack.types.channel_id,
-      },
       creator_user_id: {
         type: Schema.slack.types.user_id,
       },
@@ -25,13 +22,40 @@ export const PollFunction = DefineFunction({
           type: Schema.types.string,
         },
       },
+      channel_id: {
+        type: Schema.types.string,
+      },
+      names_visibility_during: {
+        type: Schema.types.string,
+      },
+      names_visibility_after: {
+        type: Schema.types.string,
+      },
+      counts_visibility_during: {
+        type: Schema.types.string,
+      },
+      counts_visibility_after: {
+        type: Schema.types.string,
+      },
+      max_votes_per_user: {
+        type: Schema.types.number,
+      },
+      end_date_time: {
+        type: Schema.types.number,
+      },
     },
     required: [
-      "channel_id",
       "creator_user_id",
       "uuid",
       "title",
       "options",
+      "channel_id",
+      "names_visibility_during",
+      "names_visibility_after",
+      "counts_visibility_during",
+      "counts_visibility_after",
+      "max_votes_per_user",
+      "end_date_time",
     ],
   },
   output_parameters: {
@@ -44,7 +68,6 @@ export default SlackFunction(
   PollFunction,
   async ({ inputs, client }) => {
     const blocks = messageBlocks(inputs.title, inputs.options, {}, false);
-
     await client.chat.postMessage({
       channel: inputs.channel_id,
       blocks: blocks,

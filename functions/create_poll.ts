@@ -1,6 +1,12 @@
 import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
 import { getEmoji } from "./utils/utils.ts";
 
+export const EVERYONE = "everyone";
+export const ONLY_ME = "only_me";
+export const NO_ONE = "no_one";
+export const LIMITED = "limited";
+export const UNLIMITED = "unlimited";
+
 export const CreatePoll = DefineFunction({
   callback_id: "create_poll",
   title: "Create a poll",
@@ -34,8 +40,40 @@ export const CreatePoll = DefineFunction({
           type: Schema.types.string,
         },
       },
+      channel_id: {
+        type: Schema.types.string,
+      },
+      names_visibility_during: {
+        type: Schema.types.string,
+      },
+      names_visibility_after: {
+        type: Schema.types.string,
+      },
+      counts_visibility_during: {
+        type: Schema.types.string,
+      },
+      counts_visibility_after: {
+        type: Schema.types.string,
+      },
+      max_votes_per_user: {
+        type: Schema.types.number,
+      },
+      end_date_time: {
+        type: Schema.types.number,
+      },
     },
-    required: ["uuid", "title", "options"],
+    required: [
+      "uuid",
+      "title",
+      "options",
+      "channel_id",
+      "names_visibility_during",
+      "names_visibility_after",
+      "counts_visibility_during",
+      "counts_visibility_after",
+      "max_votes_per_user",
+      "end_date_time",
+    ],
   },
 });
 
@@ -62,21 +100,45 @@ export default SlackFunction(
       .map((option: string, index: number) =>
         getEmoji(index + 1) + " " + option
       );
+    const channel_id = view.state.values.channel?.value?.selected_conversation;
+    const names_visibility_during =
+      view.state.values.names_visibility_during?.visibility_selection
+        ?.selected_option?.value || EVERYONE;
+    const names_visibility_after =
+      view.state.values.names_visibility_after?.visibility_selection
+        ?.selected_option?.value || EVERYONE;
+    const counts_visibility_during = view.state.values.counts_visibility_during
+      ?.visibility_selection?.selected_option?.value || EVERYONE;
+    const counts_visibility_after = view.state.values.counts_visibility_after
+      ?.visibility_selection?.selected_option?.value || EVERYONE;
+    const max_votes_per_user =
+      view.state.values.max_votes_per_user?.value?.value || 0;
+    const end_date_time =
+      view.state.values.end_date_time?.value?.selected_date_time ||
+      0;
+
     // deno-lint-ignore no-explicit-any
     const errors: any = {};
     let hasErrors = false;
     if (!title) {
-      errors.description = "Please enter a topic";
+      errors.title = "Please enter a topic";
       hasErrors = true;
     }
     if (options.length > 46) {
-      errors.options = "Too many items, 46 is the max";
+      errors.options = "Too many options, 46 is the max";
       hasErrors = true;
     }
     if (options.length === 0) {
       errors.options = "Please enter at least one option";
       hasErrors = true;
     }
+
+    const min_date_time = Math.floor(Date.now() / 1000) + 30; // 30 seconds from now
+    if (end_date_time < min_date_time) {
+      errors.end_date_time = "Poll end date and time must be in the future";
+      hasErrors = true;
+    }
+
     if (hasErrors) {
       return {
         response_action: "errors",
@@ -97,7 +159,15 @@ export default SlackFunction(
       uuid,
       title,
       options,
+      channel_id,
+      names_visibility_during,
+      names_visibility_after,
+      counts_visibility_during,
+      counts_visibility_after,
+      max_votes_per_user,
+      end_date_time,
     };
+
     await client.functions.completeSuccess({
       function_execution_id: body.function_data.execution_id,
       outputs,
@@ -146,31 +216,27 @@ function viewObject(state: any, channel: string) {
       "names_visibility_during",
       "visibility_selection",
       "Names visibile during the poll to",
-      { text: "Everyone", value: "everyone" },
+      { text: "Everyone", value: EVERYONE },
       [
-        { text: "Everyone", value: "everyone" },
-        { text: "Only me", value: "only_me" },
-        { text: "No one", value: "no_one" },
+        { text: "Everyone", value: EVERYONE },
+        { text: "Only me", value: ONLY_ME },
+        { text: "No one", value: NO_ONE },
       ],
     ),
   );
   const names_visibility_during =
     state.values.names_visibility_during?.visibility_selection?.selected_option
-      ?.value || "everyone";
+      ?.value || EVERYONE;
   if (
-    names_visibility_during === "only_me" ||
-    names_visibility_during === "no_one"
+    names_visibility_during === ONLY_ME ||
+    names_visibility_during === NO_ONE
   ) {
-    const valid_options = [];
-    if (
-      names_visibility_during === "only_me" ||
-      names_visibility_during === "no_one"
-    ) {
-      valid_options.push({ text: "Everyone", value: "everyone" });
-      valid_options.push({ text: "Only me", value: "only_me" });
-    }
-    if (names_visibility_during === "no_one") {
-      valid_options.push({ text: "No one", value: "no_one" });
+    const valid_options = [
+      { text: "Everyone", value: EVERYONE },
+      { text: "Only me", value: ONLY_ME },
+    ];
+    if (names_visibility_during === NO_ONE) {
+      valid_options.push({ text: "No one", value: NO_ONE });
     }
 
     blocks.push(
@@ -178,7 +244,7 @@ function viewObject(state: any, channel: string) {
         "names_visibility_after",
         "visibility_selection",
         "Names visibile after the poll is closed to",
-        { text: "Everyone", value: "everyone" },
+        { text: "Everyone", value: EVERYONE },
         valid_options,
       ),
     );
@@ -188,27 +254,27 @@ function viewObject(state: any, channel: string) {
         "counts_visibility_during",
         "visibility_selection",
         "Vote counts visibile during the poll to",
-        { text: "Everyone", value: "everyone" },
+        { text: "Everyone", value: EVERYONE },
         valid_options,
       ),
     );
     const counts_visibility_during =
       state.values.counts_visibility_during?.visibility_selection
         ?.selected_option
-        ?.value || "everyone";
+        ?.value || EVERYONE;
     if (
-      counts_visibility_during === "only_me" ||
-      counts_visibility_during === "no_one"
+      counts_visibility_during === ONLY_ME ||
+      counts_visibility_during === NO_ONE
     ) {
       blocks.push(
         menu_select(
           "counts_visibility_after",
           "visibility_selection",
           "Vote counts visibile after the poll is closed to",
-          { text: "Everyone", value: "everyone" },
+          { text: "Everyone", value: EVERYONE },
           [
-            { text: "Everyone", value: "everyone" },
-            { text: "Only me", value: "only_me" },
+            { text: "Everyone", value: EVERYONE },
+            { text: "Only me", value: ONLY_ME },
           ],
         ),
       );
@@ -219,17 +285,17 @@ function viewObject(state: any, channel: string) {
       "votes_per_user",
       "vote_limit_selection",
       "Votes per user",
-      { text: "Unlimited", value: "unlimited" },
+      { text: "Unlimited", value: UNLIMITED },
       [
-        { text: "Unlimited", value: "unlimited" },
-        { text: "Limited", value: "limited" },
+        { text: "Unlimited", value: UNLIMITED },
+        { text: "Limited", value: LIMITED },
       ],
     ),
   );
   const votes_per_user =
     state.values.votes_per_user?.vote_limit_selection?.selected_option?.value ||
-    "unlimited";
-  if (votes_per_user === "limited") {
+    UNLIMITED;
+  if (votes_per_user === LIMITED) {
     blocks.push({
       "type": "input",
       "block_id": "max_votes_per_user",

@@ -34,11 +34,17 @@ const { outputs } = PollWorkflow.addStep(
 PollWorkflow.addStep(
   PollFunction,
   {
-    channel_id: PollWorkflow.inputs.channel,
     creator_user_id: PollWorkflow.inputs.creator_user_id,
     uuid: outputs.uuid,
     title: outputs.title,
     options: outputs.options,
+    channel_id: outputs.channel_id,
+    names_visibility_during: outputs.names_visibility_during,
+    names_visibility_after: outputs.names_visibility_after,
+    counts_visibility_during: outputs.counts_visibility_during,
+    counts_visibility_after: outputs.counts_visibility_after,
+    max_votes_per_user: outputs.max_votes_per_user,
+    end_date_time: outputs.end_date_time,
   },
 );
 
