@@ -420,26 +420,14 @@ export default SlackFunction(
             },
           });
 
-          const allResultsBlocks = resultsBlocks(
-            inputs.title,
-            inputs.options,
-            statistics,
-          );
-          // divide blocks into two parts, because Slack API has a limit of 50 blocks
-          const firstInstallmentBlocks = allResultsBlocks.slice(0, 50);
-          const secondInstallmentBlocks = allResultsBlocks.slice(50, 100);
-
           await client.chat.postMessage({
             channel: inputs.creator_user_id,
-            blocks: firstInstallmentBlocks,
+            blocks: resultsBlocks(
+              inputs.title,
+              inputs.options,
+              statistics,
+            ),
           });
-
-          if (secondInstallmentBlocks.length > 0) {
-            await client.chat.postMessage({
-              channel: inputs.creator_user_id,
-              blocks: secondInstallmentBlocks,
-            });
-          }
 
           await client.apps.datastore.put({
             datastore: "vote_header",
@@ -938,17 +926,8 @@ function resultsBlocks(title: string, options: Array<string>, statistics: any) {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: options[i],
+        text: options[i] + "\n" + "`" + voteCount + "`" + " " + voterNames,
       },
-    });
-    blocks.push({
-      type: "context",
-      elements: [
-        {
-          type: "mrkdwn",
-          text: "`" + voteCount + "`" + " " + voterNames,
-        },
-      ],
     });
   }
 
