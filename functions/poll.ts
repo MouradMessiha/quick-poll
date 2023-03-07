@@ -1,4 +1,12 @@
 import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
+import { SlackAPIClient } from "deno-slack-api/types.ts";
+import {
+  EVERYONE,
+  LIMITED,
+  NO_ONE,
+  ONLY_ME,
+  UNLIMITED,
+} from "./create_poll.ts";
 
 export const PollFunction = DefineFunction({
   callback_id: "poll_function",
@@ -381,64 +389,8 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   "delete_poll", // action_id
   async ({ body, inputs, client }) => { // The second argument is the handler function itself
-    // check if vote is closed
-    const responseVoteHeader = await client.apps.datastore.get({
-      datastore: "vote_header",
-      id: inputs.uuid,
-    });
-    // close the vote
-    if (responseVoteHeader.ok) {
-      const isVoteClosed = responseVoteHeader.item.is_vote_closed === undefined
-        ? true
-        : responseVoteHeader.item.is_vote_closed;
-      if (!isVoteClosed) {
-        // get vote statistics
-        const responseAllVotes = await client.apps.datastore.query({
-          datastore: "vote_detail",
-          expression: "#vote_id = :search_id",
-          expression_attributes: { "#vote_id": "vote_id" },
-          expression_values: { ":search_id": inputs.uuid },
-        });
-        if (responseAllVotes.ok) {
-          const statistics = voteStatistics(responseAllVotes.items);
-          const eventPayload = { statistics, isPollClosed: true };
-          const messageTimestamp = body.view.private_metadata;
-          const blocks = messageBlocks(
-            inputs.title,
-            inputs.options,
-            statistics,
-            true,
-          );
+    await closeVote(client, inputs, body.view.private_metadata);
 
-          await client.chat.update({
-            channel: inputs.channel_id,
-            ts: messageTimestamp,
-            blocks: blocks,
-            metadata: {
-              event_type: "quick_poll",
-              event_payload: eventPayload,
-            },
-          });
-
-          await client.chat.postMessage({
-            channel: inputs.creator_user_id,
-            blocks: resultsBlocks(
-              inputs.title,
-              inputs.options,
-              statistics,
-            ),
-          });
-
-          await client.apps.datastore.put({
-            datastore: "vote_header",
-            item: {
-              id: inputs.uuid,
-              is_vote_closed: true,
-            },
-          });
-        }
-      }
-    }
     // delete the vote message
     const messageTimestamp = body.view.private_metadata;
     await client.chat.delete({
@@ -477,75 +429,7 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   "close_poll", // action_id
   async ({ body, inputs, client }) => { // The second argument is the handler function itself
-    // check if vote is closed
-    const responseVoteHeader = await client.apps.datastore.get({
-      datastore: "vote_header",
-      id: inputs.uuid,
-    });
-    if (responseVoteHeader.ok) {
-      const isVoteClosed = responseVoteHeader.item.is_vote_closed === undefined
-        ? true
-        : responseVoteHeader.item.is_vote_closed;
-      if (!isVoteClosed) {
-        // get vote statistics
-        const responseAllVotes = await client.apps.datastore.query({
-          datastore: "vote_detail",
-          expression: "#vote_id = :search_id",
-          expression_attributes: { "#vote_id": "vote_id" },
-          expression_values: { ":search_id": inputs.uuid },
-        });
-        if (responseAllVotes.ok) {
-          const statistics = voteStatistics(responseAllVotes.items);
-          const eventPayload = { statistics, isPollClosed: true };
-          const messageTimestamp = body.view.private_metadata;
-          const blocks = messageBlocks(
-            inputs.title,
-            inputs.options,
-            statistics,
-            true,
-          );
-
-          await client.chat.update({
-            channel: inputs.channel_id,
-            ts: messageTimestamp,
-            blocks: blocks,
-            metadata: {
-              event_type: "quick_poll",
-              event_payload: eventPayload,
-            },
-          });
-
-          const allResultsBlocks = resultsBlocks(
-            inputs.title,
-            inputs.options,
-            statistics,
-          );
-          // divide blocks into two parts, because Slack API has a limit of 50 blocks
-          const firstInstallmentBlocks = allResultsBlocks.slice(0, 50);
-          const secondInstallmentBlocks = allResultsBlocks.slice(50, 100);
-
-          await client.chat.postMessage({
-            channel: inputs.creator_user_id,
-            blocks: firstInstallmentBlocks,
-          });
-
-          if (secondInstallmentBlocks.length > 0) {
-            await client.chat.postMessage({
-              channel: inputs.creator_user_id,
-              blocks: secondInstallmentBlocks,
-            });
-          }
-
-          await client.apps.datastore.put({
-            datastore: "vote_header",
-            item: {
-              id: inputs.uuid,
-              is_vote_closed: true,
-            },
-          });
-        }
-      }
-    }
+    await closeVote(client, inputs, body.view.private_metadata);
 
     await client.views.update({
       interactivity_pointer: body.interactivity.interactivity_pointer,
@@ -890,8 +774,13 @@ function menuOptionsBlocks(
   return blocks;
 }
 
-// deno-lint-ignore no-explicit-any
-function resultsBlocks(title: string, options: Array<string>, statistics: any) {
+function resultsBlocks(
+  title: string,
+  options: Array<string>,
+  statistics: any,
+  send_voter_names: boolean,
+  // deno-lint-ignore no-explicit-any
+): Array<any> {
   const blocks = [];
 
   blocks.push({
@@ -926,10 +815,83 @@ function resultsBlocks(title: string, options: Array<string>, statistics: any) {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: options[i] + "\n" + "`" + voteCount + "`" + " " + voterNames,
+        text: options[i] + "\n" + "`" + voteCount + "`" +
+          (send_voter_names ? " " + voterNames : ""),
       },
     });
   }
 
   return blocks;
+}
+
+async function closeVote(
+  client: SlackAPIClient,
+  // deno-lint-ignore no-explicit-any
+  inputs: any,
+  messageTimestamp: string,
+) {
+  // check if vote is closed
+  const responseVoteHeader = await client.apps.datastore.get({
+    datastore: "vote_header",
+    id: inputs.uuid,
+  });
+  // close the vote
+  if (responseVoteHeader.ok) {
+    const isVoteClosed = responseVoteHeader.item.is_vote_closed === undefined
+      ? true
+      : responseVoteHeader.item.is_vote_closed;
+    if (!isVoteClosed) {
+      // get vote statistics
+      const responseAllVotes = await client.apps.datastore.query({
+        datastore: "vote_detail",
+        expression: "#vote_id = :search_id",
+        expression_attributes: { "#vote_id": "vote_id" },
+        expression_values: { ":search_id": inputs.uuid },
+      });
+      if (responseAllVotes.ok) {
+        const statistics = voteStatistics(responseAllVotes.items);
+        const eventPayload = { statistics, isPollClosed: true };
+        const blocks = messageBlocks(
+          inputs.title,
+          inputs.options,
+          statistics,
+          true,
+        );
+
+        await client.chat.update({
+          channel: inputs.channel_id,
+          ts: messageTimestamp,
+          blocks: blocks,
+          metadata: {
+            event_type: "quick_poll",
+            event_payload: eventPayload,
+          },
+        });
+
+        const send_voter_names: boolean =
+          inputs.names_visibility_after === ONLY_ME;
+        const send_vote_counts: boolean =
+          inputs.counts_visibility_after === ONLY_ME;
+        if (send_voter_names || send_vote_counts) {
+          await client.chat.postMessage({
+            channel: inputs.creator_user_id,
+            blocks: resultsBlocks(
+              inputs.title,
+              inputs.options,
+              statistics,
+              send_voter_names,
+            ),
+          });
+        }
+
+        await client.apps.datastore.put({
+          datastore: "vote_header",
+          item: {
+            id: inputs.uuid,
+            is_vote_closed: true,
+          },
+        });
+      }
+    }
+  }
 }
