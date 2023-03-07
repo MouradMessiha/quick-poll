@@ -100,7 +100,7 @@ export default SlackFunction(
       .map((option: string, index: number) =>
         getEmoji(index + 1) + " " + option
       );
-    const channel_id = view.state.values.channel?.value?.selected_conversation;
+    const channel_id = view.state.values.channel?.value?.selected_channel;
     const names_visibility_during =
       view.state.values.names_visibility_during?.visibility_selection
         ?.selected_option?.value || EVERYONE;
@@ -206,9 +206,9 @@ function viewObject(state: any, channel: string) {
       "text": "Channel",
     },
     "element": {
-      "type": "conversations_select",
+      "type": "channels_select",
       "action_id": "value",
-      "initial_conversation": channel,
+      "initial_channel": channel,
     },
   });
   blocks.push(
