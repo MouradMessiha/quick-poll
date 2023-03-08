@@ -1,12 +1,6 @@
 import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
 import { SlackAPIClient } from "deno-slack-api/types.ts";
-import {
-  EVERYONE,
-  LIMITED,
-  NO_ONE,
-  ONLY_ME,
-  UNLIMITED,
-} from "./create_poll.ts";
+import { EVERYONE, ONLY_ME } from "./create_poll.ts";
 
 export const PollFunction = DefineFunction({
   callback_id: "poll_function",
@@ -792,6 +786,7 @@ function menuOptionsBlocks(
 function resultsBlocks(
   title: string,
   options: Array<string>,
+  // deno-lint-ignore no-explicit-any
   statistics: any,
   send_voter_names: boolean,
   // deno-lint-ignore no-explicit-any
