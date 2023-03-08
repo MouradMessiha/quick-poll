@@ -75,7 +75,7 @@ export const PollFunction = DefineFunction({
 export default SlackFunction(
   PollFunction,
   async ({ inputs, client }) => {
-    const blocks = messageBlocks(inputs.title, inputs.options, {}, false);
+    const blocks = messageBlocks(inputs, {}, false);
     await client.chat.postMessage({
       channel: inputs.channel_id,
       blocks: blocks,
@@ -98,8 +98,7 @@ export default SlackFunction(
     if (isVoteClosed) {
       const statistics = body.message?.metadata?.event_payload?.statistics;
       const blocks = messageBlocks(
-        inputs.title,
-        inputs.options,
+        inputs,
         statistics,
         isVoteClosed,
       );
@@ -149,8 +148,7 @@ export default SlackFunction(
       if (responseAllVotes.ok) {
         const statistics = voteStatistics(responseAllVotes.items);
         const blocks = messageBlocks(
-          inputs.title,
-          inputs.options,
+          inputs,
           statistics,
           false,
         );
@@ -161,11 +159,13 @@ export default SlackFunction(
           blocks: blocks,
         });
       }
-      await client.chat.postEphemeral({
-        channel: inputs.channel_id,
-        text: confirmationMessage,
-        user: body.user.id,
-      });
+      if (!(inputs.names_visibility_during === EVERYONE)) {
+        await client.chat.postEphemeral({
+          channel: inputs.channel_id,
+          text: confirmationMessage,
+          user: body.user.id,
+        });
+      }
     }
   },
 ).addBlockActionsHandler(
@@ -175,8 +175,7 @@ export default SlackFunction(
     if (isVoteClosed) {
       const statistics = body.message?.metadata?.event_payload?.statistics;
       const blocks = messageBlocks(
-        inputs.title,
-        inputs.options,
+        inputs,
         statistics,
         isVoteClosed,
       );
@@ -338,8 +337,7 @@ export default SlackFunction(
       const statistics = voteStatistics(responseAllVotes.items);
       const messageTimestamp = body.view.private_metadata;
       const blocks = messageBlocks(
-        inputs.title,
-        inputs.options,
+        inputs,
         statistics,
         false,
       );
@@ -350,14 +348,16 @@ export default SlackFunction(
       });
     }
 
-    const confirmationMessage = isVoteYes
-      ? "You voted for: " + item_text
-      : "Vote removed for: " + item_text;
-    await client.chat.postEphemeral({
-      channel: inputs.channel_id,
-      text: confirmationMessage,
-      user: body.user.id,
-    });
+    if (!(inputs.names_visibility_during === EVERYONE)) {
+      const confirmationMessage = isVoteYes
+        ? "You voted for: " + item_text
+        : "Vote removed for: " + item_text;
+      await client.chat.postEphemeral({
+        channel: inputs.channel_id,
+        text: confirmationMessage,
+        user: body.user.id,
+      });
+    }
   },
 ).addBlockActionsHandler(
   "menu", // action_id
@@ -587,8 +587,8 @@ function voteStatistics(items: Array<any>): any {
 }
 
 function messageBlocks(
-  title: string,
-  options: Array<string>,
+  // deno-lint-ignore no-explicit-any
+  inputs: any,
   // deno-lint-ignore no-explicit-any
   statistics: any,
   isPollClosed: boolean,
@@ -600,7 +600,7 @@ function messageBlocks(
     type: "section",
     text: {
       type: "mrkdwn",
-      text: title,
+      text: inputs.title,
     },
     accessory: {
       type: "button",
@@ -617,13 +617,29 @@ function messageBlocks(
     type: "divider",
   });
 
-  for (let i = 0; i < options.length; i++) {
+  const show_voter_names = inputs.names_visibility_during === EVERYONE ||
+    (inputs.names_visibility_after === EVERYONE && isPollClosed);
+  const show_vote_counts = inputs.counts_visibility_during === EVERYONE ||
+    (inputs.counts_visibility_after === EVERYONE && isPollClosed);
+
+  for (let i = 0; i < inputs.options.length; i++) {
+    const voters = statistics["item_" + (i + 1)] || [];
+    const voterNames = voters.map((voter: string) => {
+      return "<@" + voter + ">";
+    }).join("");
+    const totalVotes = voters.length;
+    const votePlural = totalVotes === 1 ? "vote" : "votes";
+    const voteCount = totalVotes ? `${totalVotes} ${votePlural}` : "no votes";
+    const optionText = inputs.options[i] +
+      (show_vote_counts ? "\n" + "`" + voteCount + "`" : "") +
+      (show_voter_names ? (" " + voterNames).trimEnd() : "");
+
     if (isPollClosed) {
       blocks.push({
         type: "section",
         text: {
           type: "mrkdwn",
-          text: options[i],
+          text: optionText,
         },
       });
     } else {
@@ -631,7 +647,7 @@ function messageBlocks(
         type: "section",
         text: {
           type: "mrkdwn",
-          text: options[i],
+          text: optionText,
         },
         accessory: {
           type: "button",
@@ -648,9 +664,8 @@ function messageBlocks(
 
   const totalVotes = statistics.totalVotes || 0;
   const votePlural = totalVotes === 1 ? "vote" : "votes";
-  const totalMessage = totalVotes
-    ? totalVotes + ` ${votePlural} received`
-    : " ";
+  const totalMessage = (isPollClosed ? "Poll closed. " : "") +
+    (totalVotes ? totalVotes + ` ${votePlural} received.` : " ");
 
   blocks.push({
     type: "context",
@@ -852,8 +867,7 @@ async function closeVote(
         const statistics = voteStatistics(responseAllVotes.items);
         const eventPayload = { statistics, isPollClosed: true };
         const blocks = messageBlocks(
-          inputs.title,
-          inputs.options,
+          inputs,
           statistics,
           true,
         );
