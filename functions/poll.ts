@@ -129,7 +129,8 @@ export default SlackFunction(
             const itemPlural = maxVotes > 1 ? "items" : "item";
             await client.chat.postEphemeral({
               channel: inputs.channel_id,
-              text: "You can only vote for " + maxVotes + " " + itemPlural,
+              text: ":exclamation: You can only vote for " + maxVotes + " " +
+                itemPlural,
               user: body.user.id,
             });
             return;
@@ -288,7 +289,8 @@ export default SlackFunction(
             const itemPlural = maxVotes > 1 ? "items" : "item";
             await client.chat.postEphemeral({
               channel: inputs.channel_id,
-              text: "You can only vote for " + maxVotes + " " + itemPlural,
+              text: ":exclamation: You can only vote for " + maxVotes + " " +
+                itemPlural,
               user: body.user.id,
             });
             return;
