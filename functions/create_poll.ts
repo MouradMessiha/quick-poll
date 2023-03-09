@@ -113,9 +113,10 @@ export default SlackFunction(
       ?.visibility_selection?.selected_option?.value || EVERYONE;
     const max_votes_per_user =
       view.state.values.max_votes_per_user?.value?.value || 0;
-    const end_date_time =
+    const exact_end_date_time =
       view.state.values.end_date_time?.value?.selected_date_time ||
       0;
+    const end_date_time = exact_end_date_time - (exact_end_date_time % 60);
 
     // deno-lint-ignore no-explicit-any
     const errors: any = {};

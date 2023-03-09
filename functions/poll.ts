@@ -1,6 +1,6 @@
 import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
 import { SlackAPIClient } from "deno-slack-api/types.ts";
-import { EVERYONE, ONLY_ME } from "./create_poll.ts";
+import { EVERYONE, NO_ONE, ONLY_ME } from "./create_poll.ts";
 
 export const PollFunction = DefineFunction({
   callback_id: "poll_function",
@@ -391,6 +391,7 @@ export default SlackFunction(
           inputs,
           body.user.id,
           body.message?.metadata?.event_payload?.isPollClosed,
+          body.message?.metadata?.event_payload?.closeTime || 0,
         ),
       },
     });
@@ -824,6 +825,7 @@ function menuOptionsBlocks(
   inputs: any,
   userID: string,
   isPollClosed: boolean,
+  closeTime: number,
   // deno-lint-ignore no-explicit-any
 ): Array<any> {
   const blocks = [];
@@ -884,15 +886,17 @@ function menuOptionsBlocks(
         action_id: "delete_poll",
       },
     });
-  } else {
-    blocks.push({
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: "This poll was created by <@" + inputs.creator_user_id + ">",
-      },
-    });
   }
+
+  blocks.push({
+    type: "context",
+    elements: pollInformation(inputs, isPollClosed, closeTime).map(
+      (blockText: string) => ({
+        type: "mrkdwn",
+        text: blockText,
+      }),
+    ),
+  });
 
   return blocks;
 }
@@ -956,7 +960,11 @@ async function closeVote(
     });
     if (responseAllVotes.ok) {
       const statistics = voteStatistics(responseAllVotes.items);
-      const eventPayload = { statistics, isPollClosed: true };
+      const eventPayload = {
+        statistics,
+        isPollClosed: true,
+        closeTime: Date.now(),
+      };
       const blocks = messageBlocks(
         inputs,
         statistics,
@@ -1025,4 +1033,104 @@ async function isPollClosed(
       : responseVoteHeader.item.is_vote_closed;
   }
   return false;
+}
+
+function pollInformation(
+  // deno-lint-ignore no-explicit-any
+  inputs: any,
+  isPollClosed: boolean,
+  closeTime: number,
+): Array<string> {
+  const lines = [];
+  // Creator
+  lines.push("This poll was created by <@" + inputs.creator_user_id + ">");
+  // max number of users
+  if (inputs.max_votes_per_user === 0) {
+    lines.push("There is no limit to the number of votes per user");
+  } else {
+    const votePlural = inputs.max_votes_per_user === 1 ? "vote" : "votes";
+    lines.push(
+      "There is a limit of " + inputs.max_votes_per_user +
+        " " + votePlural + " per user",
+    );
+  }
+  // Name visibility
+  if (inputs.names_visibility_during === EVERYONE) {
+    lines.push("Names are visible to everyone in the channel");
+  } else if (
+    inputs.names_visibility_during === ONLY_ME &&
+    inputs.names_visibility_after === EVERYONE
+  ) {
+    lines.push(
+      "Names are visible to <@" + inputs.creator_user_id +
+        "> during the poll then to everyone in the channel after the poll is closed",
+    );
+  } else if (
+    inputs.names_visibility_during === ONLY_ME &&
+    inputs.names_visibility_after === ONLY_ME
+  ) {
+    lines.push(
+      "Names are visible to <@" + inputs.creator_user_id + "> only",
+    );
+  } else if (
+    inputs.names_visibility_during === NO_ONE &&
+    inputs.names_visibility_after === EVERYONE
+  ) {
+    lines.push(
+      "Names are visible to everyone in the channel after the poll is closed",
+    );
+  } else if (
+    inputs.names_visibility_during === NO_ONE &&
+    inputs.names_visibility_after === ONLY_ME
+  ) {
+    lines.push(
+      "Names are visible to <@" + inputs.creator_user_id +
+        "> after the poll is closed",
+    );
+  } else {
+    lines.push("Names are not visible to anyone");
+  }
+
+  // Vote counts visibility
+  if (inputs.counts_visibility_during === EVERYONE) {
+    lines.push("Vote counts are visible to everyone in the channel");
+  } else if (
+    inputs.counts_visibility_during === ONLY_ME &&
+    inputs.counts_visibility_after === EVERYONE
+  ) {
+    lines.push(
+      "Vote counts are visible to <@" + inputs.creator_user_id +
+        "> during the poll then to everyone in the channel after the poll is closed",
+    );
+  } else if (
+    inputs.counts_visibility_during === ONLY_ME &&
+    inputs.counts_visibility_after === ONLY_ME
+  ) {
+    lines.push(
+      "Vote counts are visible to <@" + inputs.creator_user_id + "> only",
+    );
+  } else if (
+    inputs.counts_visibility_during === NO_ONE &&
+    inputs.counts_visibility_after === EVERYONE
+  ) {
+    lines.push(
+      "Vote counts are visible to everyone in the channel after the poll is closed",
+    );
+  } else {
+    lines.push(
+      "Vote counts are visible to <@" + inputs.creator_user_id +
+        "> after the poll is closed",
+    );
+  }
+
+  // Close time
+  if (isPollClosed) {
+    lines.push("Poll closed at " + new Date(closeTime).toLocaleString());
+  } else {
+    lines.push(
+      "Poll closes at " +
+        new Date(inputs.end_date_time * 1000).toLocaleString(),
+    );
+  }
+  return lines;
 }
