@@ -122,6 +122,19 @@ export default SlackFunction(
         confirmationMessage = "Vote removed for: " + item_text;
       } else {
         newHashVotes = addVote(hashVotes, body.user.id, item_index);
+        const maxVotes = inputs.max_votes_per_user;
+        if (maxVotes > 0) {
+          const userVotes = allUserItems(newHashVotes, body.user.id);
+          if (userVotes.length > maxVotes) {
+            const itemPlural = maxVotes > 1 ? "items" : "item";
+            await client.chat.postEphemeral({
+              channel: inputs.channel_id,
+              text: "You can only vote for " + maxVotes + " " + itemPlural,
+              user: body.user.id,
+            });
+            return;
+          }
+        }
         confirmationMessage = "You voted for: " + item_text;
       }
       await client.apps.datastore.put({
@@ -268,6 +281,19 @@ export default SlackFunction(
       let newHashVotes = "";
       if (isVoteYes) {
         newHashVotes = addVote(hashVotes, body.user.id, item_index);
+        const maxVotes = inputs.max_votes_per_user;
+        if (maxVotes > 0) {
+          const userVotes = allUserItems(newHashVotes, body.user.id);
+          if (userVotes.length > maxVotes) {
+            const itemPlural = maxVotes > 1 ? "items" : "item";
+            await client.chat.postEphemeral({
+              channel: inputs.channel_id,
+              text: "You can only vote for " + maxVotes + " " + itemPlural,
+              user: body.user.id,
+            });
+            return;
+          }
+        }
       } else {
         newHashVotes = removeVote(hashVotes, body.user.id, item_index);
       }
