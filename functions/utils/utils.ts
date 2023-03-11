@@ -41,7 +41,22 @@ export async function closeVote(
   inputs: any,
   messageTimestamp: string,
 ) {
-  if (!await isPollClosed(inputs.uuid, client)) {
+  const responseVoteHeader = await client.apps.datastore.get({
+    datastore: "vote_header",
+    id: inputs.uuid,
+  });
+  let isVoteClosed = false;
+  let trigger_id = "";
+  if (responseVoteHeader.ok) {
+    isVoteClosed = responseVoteHeader.item.is_vote_closed === undefined
+      ? true
+      : responseVoteHeader.item.is_vote_closed;
+    trigger_id = responseVoteHeader.item.trigger_id;
+  } else {
+    isVoteClosed = true;
+  }
+
+  if (!isVoteClosed) {
     // get vote statistics
     const responseAllVotes = await client.apps.datastore.query({
       datastore: "vote_detail",
@@ -99,11 +114,21 @@ export async function closeVote(
         });
       }
 
+      console.log("Deleting one time trigger with id " + trigger_id);
+
+      const deleteResponse = await client.workflows.triggers.delete({
+        trigger_id,
+      });
+      if (!deleteResponse.ok) {
+        console.log("Error deleting trigger " + trigger_id);
+      }
+
       await client.apps.datastore.put({
         datastore: "vote_header",
         item: {
           id: inputs.uuid,
           is_vote_closed: true,
+          trigger_id: trigger_id,
         },
       });
     }

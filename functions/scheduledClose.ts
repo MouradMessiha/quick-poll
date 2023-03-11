@@ -32,22 +32,6 @@ export default SlackFunction(
 
     await closeVote(client, inputs.pollinputs, inputs.message_ts);
 
-    const responseVoteHeader = await client.apps.datastore.get({
-      datastore: "vote_header",
-      id: inputs.pollinputs.uuid,
-    });
-    if (responseVoteHeader.ok) {
-      const trigger_id = responseVoteHeader.item.trigger_id;
-      console.log("Deleting one time trigger with id " + trigger_id);
-
-      const deleteResponse = await client.workflows.triggers.delete({
-        trigger_id,
-      });
-      if (!deleteResponse.ok) {
-        console.log("Error deleting trigger " + trigger_id);
-      }
-    }
-
     return { outputs: {} };
   },
 );
