@@ -32,6 +32,7 @@ export const VoteHeaderDatastore = DefineDatastore({
   attributes: {
     id: { type: Schema.types.string },
     is_vote_closed: { type: Schema.types.boolean },
+    trigger_id: { type: Schema.types.string },
   },
 });
 

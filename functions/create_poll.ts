@@ -1,11 +1,12 @@
 import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
 import { getEmoji } from "./utils/utils.ts";
-
-export const EVERYONE = "everyone";
-export const ONLY_ME = "only_me";
-export const NO_ONE = "no_one";
-export const LIMITED = "limited";
-export const UNLIMITED = "unlimited";
+import {
+  EVERYONE,
+  LIMITED,
+  NO_ONE,
+  ONLY_ME,
+  UNLIMITED,
+} from "./utils/utils.ts";
 
 export const CreatePoll = DefineFunction({
   callback_id: "create_poll",
@@ -153,6 +154,7 @@ export default SlackFunction(
       item: {
         id: uuid,
         is_vote_closed: false,
+        trigger_id: "",
       },
     });
 
