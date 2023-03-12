@@ -183,11 +183,15 @@ export function messageBlocks(
 ): Array<any> {
   const blocks = [];
 
+  const boldTitle = inputs.title.includes("*")
+    ? inputs.title
+    : "*" + inputs.title + "*";
+
   blocks.push({
     type: "section",
     text: {
       type: "mrkdwn",
-      text: inputs.title,
+      text: boldTitle,
     },
     accessory: {
       type: "button",
@@ -249,22 +253,6 @@ export function messageBlocks(
     }
   }
 
-  const totalVotes = statistics.totalVotes || 0;
-  const votePlural = totalVotes === 1 ? "vote" : "votes";
-  const totalMessage = (isPollClosed ? "Poll closed. " : "") +
-    (totalVotes ? totalVotes + ` ${votePlural} received.` : " ");
-
-  blocks.push({
-    type: "context",
-    elements: [
-      {
-        type: "plain_text",
-        text: totalMessage,
-        emoji: true,
-      },
-    ],
-  });
-
   if (!isPollClosed) {
     blocks.push({
       type: "actions",
@@ -281,6 +269,23 @@ export function messageBlocks(
       ],
     });
   }
+
+  const totalVotes = statistics.totalVotes || 0;
+  const votePlural = totalVotes === 1 ? "vote" : "votes";
+  const totalMessage = (isPollClosed ? "Poll closed. " : "") +
+    (totalVotes ? totalVotes + ` ${votePlural} received.` : "");
+  const contextMessage = (totalMessage + "\n").trimStart() +
+    "<https://slack.com/shortcuts/Ft04GET4BKGF/aba6a4f75dbeb9da745d0686227b228e|Create a new poll>";
+
+  blocks.push({
+    type: "context",
+    elements: [
+      {
+        type: "mrkdwn",
+        text: contextMessage,
+      },
+    ],
+  });
 
   return blocks;
 }

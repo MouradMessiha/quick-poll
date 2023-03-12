@@ -79,6 +79,8 @@ export default SlackFunction(
     const messageResponse = await client.chat.postMessage({
       channel: inputs.channel_id,
       blocks: blocks,
+      unfurl_links: false,
+      unfurl_media: false,
       metadata: {
         event_type: "quick_poll",
         event_payload: {
