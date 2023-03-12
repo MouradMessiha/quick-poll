@@ -141,8 +141,9 @@ export async function closeVote(
       if (responseGlobalSettings.ok) {
         const globalSettings = responseGlobalSettings.item;
         if (!globalSettings.is_cleanup_trigger_created) {
-          const dateMidnight = new Date();
-          dateMidnight.setUTCHours(4, 0, 0, 0);
+          const midnight = new Date();
+          midnight.setDate(midnight.getDate() + 1);
+          midnight.setUTCHours(4, 0, 0, 0);
           const triggerResponse = await client.workflows.triggers.create({
             name: "scheduled_cleanup",
             type: "scheduled",
@@ -150,7 +151,7 @@ export async function closeVote(
               `#/workflows/${ScheduledCleanupWorkflow.definition.callback_id}`,
             inputs: {},
             schedule: {
-              start_time: dateMidnight.toISOString(),
+              start_time: midnight.toISOString(),
               timezone: "UTC",
               frequency: {
                 type: "daily",
