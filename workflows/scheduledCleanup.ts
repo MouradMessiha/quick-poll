@@ -1,4 +1,4 @@
-import { DefineWorkflow, Schema } from "deno-slack-sdk/mod.ts";
+import { DefineWorkflow } from "deno-slack-sdk/mod.ts";
 import { ScheduledCleanup } from "../functions/scheduledCleanup.ts";
 
 const ScheduledCleanupWorkflow = DefineWorkflow({

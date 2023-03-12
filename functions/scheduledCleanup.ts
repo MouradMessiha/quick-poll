@@ -1,4 +1,4 @@
-import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
+import { DefineFunction, SlackFunction } from "deno-slack-sdk/mod.ts";
 
 export const ScheduledCleanup = DefineFunction({
   callback_id: "scheduled_cleanup",
