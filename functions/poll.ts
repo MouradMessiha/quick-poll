@@ -129,22 +129,6 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   /toggle_.*/, // action_id
   async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
-    const isVoteClosed = body.message?.metadata?.event_payload?.isPollClosed;
-    if (isVoteClosed) {
-      const statistics = body.message?.metadata?.event_payload?.statistics;
-      const blocks = messageBlocks(
-        inputs,
-        statistics,
-        isVoteClosed,
-      );
-
-      await client.chat.update({
-        channel: inputs.channel_id,
-        ts: body.container.message_ts,
-        blocks: blocks,
-      });
-      return;
-    }
     const item_index = Number(action.action_id.replace("toggle_", ""));
     const item_text: string = inputs.options[item_index - 1];
     const user_hash = hashUserID(body.user.id);
@@ -220,57 +204,41 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   "view_your_votes", // action_id
   async ({ body, inputs, client }) => { // The second argument is the handler function itself
-    const isVoteClosed = body.message?.metadata?.event_payload?.isPollClosed;
-    if (isVoteClosed) {
-      const statistics = body.message?.metadata?.event_payload?.statistics;
-      const blocks = messageBlocks(
-        inputs,
-        statistics,
-        isVoteClosed,
+    const user_id = body.user.id;
+    const user_hash = hashUserID(body.user.id);
+
+    const responseHashVotes = await client.apps.datastore.get({
+      datastore: "vote_detail",
+      id: inputs.uuid + "_" + user_hash,
+    });
+    if (responseHashVotes.ok) {
+      const hashVotes = responseHashVotes.item.user_ids || "";
+      const selected_items = allUserItems(hashVotes, user_id);
+      const selected_items_set = new Set(selected_items);
+
+      const blocks = modalBlocks(
+        inputs.options,
+        selected_items_set,
       );
-
-      await client.chat.update({
-        channel: inputs.channel_id,
-        ts: body.container.message_ts,
-        blocks: blocks,
-      });
-    } else {
-      const user_id = body.user.id;
-      const user_hash = hashUserID(body.user.id);
-
-      const responseHashVotes = await client.apps.datastore.get({
-        datastore: "vote_detail",
-        id: inputs.uuid + "_" + user_hash,
-      });
-      if (responseHashVotes.ok) {
-        const hashVotes = responseHashVotes.item.user_ids || "";
-        const selected_items = allUserItems(hashVotes, user_id);
-        const selected_items_set = new Set(selected_items);
-
-        const blocks = modalBlocks(
-          inputs.options,
-          selected_items_set,
-        );
-        await client.views.open({
-          interactivity_pointer: body.interactivity.interactivity_pointer,
-          view: {
-            "type": "modal",
-            "title": {
-              "type": "plain_text",
-              "text": "Your votes",
-              "emoji": true,
-            },
-            "close": {
-              "type": "plain_text",
-              "text": "Close",
-              "emoji": true,
-            },
-            "callback_id": "your_votes",
-            "private_metadata": body.container.message_ts,
-            "blocks": blocks,
+      await client.views.open({
+        interactivity_pointer: body.interactivity.interactivity_pointer,
+        view: {
+          "type": "modal",
+          "title": {
+            "type": "plain_text",
+            "text": "Your votes",
+            "emoji": true,
           },
-        });
-      }
+          "close": {
+            "type": "plain_text",
+            "text": "Close",
+            "emoji": true,
+          },
+          "callback_id": "your_votes",
+          "private_metadata": body.container.message_ts,
+          "blocks": blocks,
+        },
+      });
     }
   },
 ).addBlockActionsHandler(

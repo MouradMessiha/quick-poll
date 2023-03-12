@@ -1,4 +1,5 @@
 import { SlackAPIClient } from "deno-slack-api/types.ts";
+import ScheduledCleanupWorkflow from "../../workflows/scheduledCleanup.ts";
 
 export const EVERYONE = "everyone";
 export const ONLY_ME = "only_me";
@@ -131,6 +132,48 @@ export async function closeVote(
           trigger_id: trigger_id,
         },
       });
+
+      // create cleanup trigger only once
+      const responseGlobalSettings = await client.apps.datastore.get({
+        datastore: "global_settings",
+        id: "singleton",
+      });
+      if (responseGlobalSettings.ok) {
+        const globalSettings = responseGlobalSettings.item;
+        if (!globalSettings.is_cleanup_trigger_created) {
+          const dateMidnight = new Date();
+          dateMidnight.setUTCHours(4, 0, 0, 0);
+          const triggerResponse = await client.workflows.triggers.create({
+            name: "scheduled_cleanup",
+            type: "scheduled",
+            workflow:
+              `#/workflows/${ScheduledCleanupWorkflow.definition.callback_id}`,
+            inputs: {},
+            schedule: {
+              start_time: dateMidnight.toISOString(),
+              timezone: "UTC",
+              frequency: {
+                type: "daily",
+                repeats_every: 1,
+              },
+            },
+          });
+          if (triggerResponse.ok) {
+            console.log("Created cleanup trigger (only done once per app)");
+            await client.apps.datastore.put({
+              datastore: "global_settings",
+              item: {
+                id: "singleton",
+                is_cleanup_trigger_created: true,
+              },
+            });
+          } else {
+            console.log("Error creating cleanup trigger");
+          }
+        }
+      } else {
+        console.log("Error getting global settings");
+      }
     }
   }
 }

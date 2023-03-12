@@ -45,3 +45,12 @@ export const VoteDetailDatastore = DefineDatastore({
     user_ids: { type: Schema.types.string },
   },
 });
+
+export const GlobalSettingsDatastore = DefineDatastore({
+  name: "global_settings",
+  primary_key: "id",
+  attributes: {
+    id: { type: Schema.types.string },
+    is_cleanup_trigger_created: { type: Schema.types.boolean },
+  },
+});
