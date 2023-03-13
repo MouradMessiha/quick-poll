@@ -31,5 +31,6 @@ export default Manifest({
     "datastore:read",
     "datastore:write",
     "triggers:write",
+    "chat:write.customize",
   ],
 });
