@@ -1,9 +1,9 @@
 # Deno Poll Slack App
 
-This app allows creating a poll in any public channel.
-It doesn't work properly in private direct messages: In multi user direct messaging,
-the poll message can't be updated. In single user direct messaging it can be updated
-but there is not much use for a poll when there are only 2 users in the chat.
+This app allows creating a poll in any public channel. It doesn't work properly
+in private direct messages: In multi user direct messaging, the poll message
+can't be updated. In single user direct messaging it can be updated but there is
+not much use for a poll when there are only 2 users in the chat.
 
 ## Setup
 
@@ -14,8 +14,7 @@ requires any of [the Slack paid plans](https://slack.com/pricing).
 
 ### Install the Slack CLI
 
-Install and configure the Slack CLI.
-Step-by-step instructions can be found in
+Install and configure the Slack CLI. Step-by-step instructions can be found in
 [Quickstart Guide](https://api.slack.com/future/quickstart).
 
 ### Clone the Repository
@@ -39,8 +38,7 @@ that Shortcut URLs will be different across each workspace, as well as between
 the Workspace that you'd like to create the Trigger in. Each Workspace has a
 development version (denoted by `(dev)`), as well as a deployed version.
 
-To create a Link Trigger for the Workflow, run the following
-command:
+To create a Link Trigger for the Workflow, run the following command:
 
 ```zsh
 $ slack trigger create --trigger-def triggers/poll_trigger.ts
@@ -87,6 +85,14 @@ Run linting with `deno lint`:
 
 ```zsh
 $ deno lint
+```
+
+## Formatting
+
+Run formatting check with `deno fmt --check`:
+
+```zsh
+$ deno fmt --check
 ```
 
 ## Deploying Your App
