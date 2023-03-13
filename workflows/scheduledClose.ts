@@ -1,6 +1,9 @@
 import { DefineWorkflow, Schema } from "deno-slack-sdk/mod.ts";
 import { ScheduledClose } from "../functions/scheduledClose.ts";
 
+/*
+ * This workflow is called by a scheduled trigger to close a poll when the end time is reached.
+ */
 const ScheduledCloseWorkflow = DefineWorkflow({
   callback_id: "scheduled_close_workflow",
   title: "Close poll",

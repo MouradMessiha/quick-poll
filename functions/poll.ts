@@ -72,9 +72,13 @@ export const PollFunction = DefineFunction({
   },
 });
 
+/*
+  Function to handle the poll after it has been created
+*/
 export default SlackFunction(
   PollFunction,
   async ({ inputs, client }) => {
+    // post the poll message based on the inputs from the modal
     const blocks = messageBlocks(inputs, {}, false);
     const messageResponse = await client.chat.postMessage({
       channel: inputs.channel_id,
@@ -89,7 +93,7 @@ export default SlackFunction(
         },
       },
     });
-
+    // create a trigger to close the poll on the end datetime
     const triggerResponse = await client.workflows.triggers.create({
       name: "scheduled_close",
       type: "scheduled",
@@ -107,7 +111,7 @@ export default SlackFunction(
       },
     });
 
-    // add trigger_id to datastore
+    // add trigger_id to datastore (used to delete the trigger when the poll is closed)
     if (triggerResponse.ok) {
       await client.apps.datastore.put({
         datastore: "vote_header",
@@ -128,11 +132,13 @@ export default SlackFunction(
     };
   },
 ).addBlockActionsHandler(
-  /toggle_.*/, // action_id
-  async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
-    // the message can be updated without changing the metadata, so a race condition can reopen the buttons while the poll is closed
+  /toggle_.*/,
+  async ({ body, action, inputs, client }) => {
+    // Handler for when the user clicks on the button next to a  vote button in the message
+    // The message can be updated without changing the metadata, so a race condition can re-display the buttons while the poll is closed
     const isVoteClosed = body.message?.metadata?.event_payload?.isPollClosed;
     if (isVoteClosed) {
+      // recover from this state by updating the message again to the closed state
       const statistics = body.message?.metadata?.event_payload?.statistics;
       const blocks = messageBlocks(
         inputs,
@@ -147,10 +153,14 @@ export default SlackFunction(
       });
       return;
     }
+    // index of the vote button that was clicked
     const item_index = Number(action.action_id.replace("toggle_", ""));
+    // text of the vote item that was clicked
     const item_text: string = inputs.options[item_index - 1];
+    // hash the user_id to group votes into at most 50 datastore records (to minimize a chance of a concurrent update to same record)
     const user_hash = hashUserID(body.user.id);
 
+    // get the current votes for all users sharing this same hash number
     const responseHashVotes = await client.apps.datastore.get({
       datastore: "vote_detail",
       id: inputs.uuid + "_" + user_hash,
@@ -203,13 +213,14 @@ export default SlackFunction(
           statistics,
           false,
         );
-
+        // update the message with the new statistics
         await client.chat.update({
           channel: inputs.channel_id,
           ts: body.container.message_ts,
           blocks: blocks,
         });
       }
+      // if user can't see their name in the message, show an ephemeral message to confirm the action
       if (!(inputs.names_visibility_during === EVERYONE)) {
         await client.chat.postEphemeral({
           channel: inputs.channel_id,
@@ -220,11 +231,13 @@ export default SlackFunction(
     }
   },
 ).addBlockActionsHandler(
-  "view_your_votes", // action_id
-  async ({ body, inputs, client }) => { // The second argument is the handler function itself
-    // the message can be updated without changing the metadata, so a race condition can reopen the buttons while the poll is closed
+  "view_your_votes",
+  async ({ body, inputs, client }) => {
+    // Handler for when the user clicks on the "View your votes" button in the message
+    // The message can be updated without changing the metadata, so a race condition can re-display the buttons while the poll is closed
     const isVoteClosed = body.message?.metadata?.event_payload?.isPollClosed;
     if (isVoteClosed) {
+      // recover from this state by updating the message again to the closed state
       const statistics = body.message?.metadata?.event_payload?.statistics;
       const blocks = messageBlocks(
         inputs,
@@ -238,9 +251,11 @@ export default SlackFunction(
         blocks: blocks,
       });
     } else {
+      // fetch the user's votes from the datastore
       const user_id = body.user.id;
       const user_hash = hashUserID(body.user.id);
 
+      // get the current votes for all users sharing this same hash number
       const responseHashVotes = await client.apps.datastore.get({
         datastore: "vote_detail",
         id: inputs.uuid + "_" + user_hash,
@@ -248,8 +263,10 @@ export default SlackFunction(
       if (responseHashVotes.ok) {
         const hashVotes = responseHashVotes.item.user_ids || "";
         const selected_items = allUserItems(hashVotes, user_id);
+        // set of items that the user has voted for
         const selected_items_set = new Set(selected_items);
 
+        // open a modal with the user's votes
         const blocks = modalBlocks(
           inputs.options,
           selected_items_set,
@@ -277,9 +294,12 @@ export default SlackFunction(
     }
   },
 ).addBlockActionsHandler(
-  /vote_.*/, // action_id
-  async ({ body, action, inputs, client }) => { // The second argument is the handler function itself
+  /vote_.*/,
+  async ({ body, action, inputs, client }) => {
+    // handler for when the user clicks on a vote button in the modal
+    // Since the modal can be opened for a long time, we need to check if the poll is still open
     if (await isPollClosed(inputs.uuid, client)) {
+      // if the poll is closed, update the modal to show the closed state
       await client.views.update({
         interactivity_pointer: body.interactivity.interactivity_pointer,
         view_id: body.view.id,
@@ -308,12 +328,16 @@ export default SlackFunction(
       return;
     }
 
+    // check if this is a vote or remove vote action
     const isVoteYes = action.action_id.startsWith("vote_yes_");
     const suffix = action.action_id
       .replace("vote_yes_", "")
       .replace("vote_no_", "");
+    // get the item index that the user clicked on
     const item_index = Number(suffix);
+    // get the text of the item that the user clicked on
     const item_text = inputs.options[item_index - 1];
+    // get the user's hash number, user votes are stored in the datastore using this hash number
     const user_hash = hashUserID(body.user.id);
 
     const responseHashVotes = await client.apps.datastore.get({
@@ -343,6 +367,7 @@ export default SlackFunction(
       } else {
         newHashVotes = removeVote(hashVotes, body.user.id, item_index);
       }
+      // update the datastore with the new votes for all users sharing the same hash number
       await client.apps.datastore.put({
         datastore: "vote_detail",
         item: {
@@ -396,13 +421,14 @@ export default SlackFunction(
         statistics,
         false,
       );
+      // update the vote message with the new statistics
       await client.chat.update({
         channel: inputs.channel_id,
         ts: messageTimestamp,
         blocks: blocks,
       });
     }
-
+    // send an ephermeral message to the user to confirm their vote, if they can't see it in the vote message
     if (!(inputs.names_visibility_during === EVERYONE)) {
       const confirmationMessage = isVoteYes
         ? "You voted for: " + item_text
@@ -415,8 +441,9 @@ export default SlackFunction(
     }
   },
 ).addBlockActionsHandler(
-  "menu", // action_id
-  async ({ body, inputs, client }) => { // The second argument is the handler function itself;
+  "menu",
+  async ({ body, inputs, client }) => {
+    // Handler for the "..." menu button
     await client.views.open({
       interactivity_pointer: body.interactivity.interactivity_pointer,
       view: {
@@ -443,8 +470,9 @@ export default SlackFunction(
     });
   },
 ).addBlockActionsHandler(
-  "delete_poll", // action_id
-  async ({ body, inputs, client }) => { // The second argument is the handler function itself
+  "delete_poll",
+  async ({ body, inputs, client }) => {
+    // Handler for the "Delete poll" button
     await closeVote(client, inputs, body.view.private_metadata);
 
     // delete the vote message
@@ -480,12 +508,14 @@ export default SlackFunction(
       },
     });
 
-    // don't complete the function, some users may have an open modal
+    // don't complete the function, some users may have an open modal, they need the function to stay open
   },
 ).addBlockActionsHandler(
   "check_votes",
   async ({ body, inputs, client }) => {
+    // Handler for the "Check votes" button, when the creator wants to see the current results during the voting period
     if (await isPollClosed(inputs.uuid, client)) {
+      // since the modal can be open for a long time, the poll may have been closed in the meantime
       await client.views.update({
         interactivity_pointer: body.interactivity.interactivity_pointer,
         view_id: body.view.id,
@@ -538,7 +568,7 @@ export default SlackFunction(
           statistics,
           show_voter_names,
         ));
-
+        // update the modal with the new statistics (only available to the poll creator)
         await client.views.update({
           interactivity_pointer: body.interactivity.interactivity_pointer,
           view_id: body.view.id,
@@ -563,8 +593,9 @@ export default SlackFunction(
   },
 )
   .addBlockActionsHandler(
-    "close_poll", // action_id
-    async ({ body, inputs, client }) => { // The second argument is the handler function itself
+    "close_poll",
+    async ({ body, inputs, client }) => {
+      // Handler for the "Close poll" button
       await closeVote(client, inputs, body.view.private_metadata);
 
       await client.views.update({
@@ -604,6 +635,9 @@ function hashUserID(userID: string): number {
   return hash % 50;
 }
 
+/*
+ * Returns true if the user has already voted for the item
+ */
 function didUserVote(
   votes: string,
   userID: string,
@@ -617,6 +651,9 @@ function didUserVote(
   return votersForItem.includes(userID);
 }
 
+/*
+ * Returns the items for which the user has voted, given the votes string of all users sharing the same hash number
+ */
 function allUserItems(
   votes: string,
   userID: string,
@@ -631,7 +668,9 @@ function allUserItems(
   }
   return items;
 }
-
+/*
+ * Returns the votes string for all users sharing a hash number, with one user's vote removed
+ */
 function removeVote(
   votes: string,
   userID: string,
@@ -647,6 +686,9 @@ function removeVote(
   return votesArray.join("|");
 }
 
+/*
+ * Returns the votes string for all users sharing a hash number, with one user's vote added
+ */
 function addVote(
   votes: string,
   userID: string,
@@ -671,6 +713,9 @@ function addVote(
   return votesArray.join("|");
 }
 
+/*
+ * return the blocks for the voting modal, all items listed, a check mark for the ones the active user voted for
+ */
 function modalBlocks(
   options: Array<string>,
   selectedSet: Set<number>,
@@ -703,6 +748,9 @@ function modalBlocks(
   return blocks;
 }
 
+/*
+ * return the blocks for the menu modal, showing poll information, and action buttons for poll creator only
+ */
 function menuOptionsBlocks(
   // deno-lint-ignore no-explicit-any
   inputs: any,
@@ -783,6 +831,10 @@ function menuOptionsBlocks(
 
   return blocks;
 }
+
+/*
+ * return lines that describe the poll information
+ */
 
 function pollInformation(
   // deno-lint-ignore no-explicit-any

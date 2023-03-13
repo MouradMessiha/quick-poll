@@ -1,6 +1,9 @@
 import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
 import { closeVote } from "./utils/utils.ts";
 
+/*
+ * This function is called by a trigger to close a poll when the end time is reached.
+ */
 export const ScheduledClose = DefineFunction({
   callback_id: "scheduled_close_poll",
   title: "Close poll",

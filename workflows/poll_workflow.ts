@@ -2,6 +2,9 @@ import { DefineWorkflow, Schema } from "deno-slack-sdk/mod.ts";
 import { PollFunction } from "../functions/poll.ts";
 import { CreatePoll } from "../functions/create_poll.ts";
 
+/*
+ * This workflow is called by a shortcut trigger to start a new poll.
+ */
 const PollWorkflow = DefineWorkflow({
   callback_id: "poll_workflow",
   title: "Poll Workflow",

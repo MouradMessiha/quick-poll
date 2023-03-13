@@ -36,12 +36,16 @@ export function getEmoji(index: number): string {
   return "-";
 }
 
+/*
+ * closes the vote in the datastore, in the message, and makes sure the daily cleanup trigger was created
+ */
 export async function closeVote(
   client: SlackAPIClient,
   // deno-lint-ignore no-explicit-any
   inputs: any,
   messageTimestamp: string,
 ) {
+  // make sure vote is not already closed
   const responseVoteHeader = await client.apps.datastore.get({
     datastore: "vote_header",
     id: inputs.uuid,
@@ -78,6 +82,7 @@ export async function closeVote(
         true,
       );
 
+      // update the message for the closed poll (remove voting buttons)
       await client.chat.update({
         channel: inputs.channel_id,
         ts: messageTimestamp,
@@ -88,6 +93,7 @@ export async function closeVote(
         },
       });
 
+      // send results to creator if needed
       const send_voter_names: boolean =
         inputs.names_visibility_after === ONLY_ME;
       const send_vote_counts: boolean =
@@ -115,8 +121,9 @@ export async function closeVote(
         });
       }
 
+      // delete the trigger that closes the poll
+      // the poll can be closed manually or by the trigger, either way, we delete the trigger
       console.log("Deleting one time trigger with id " + trigger_id);
-
       const deleteResponse = await client.workflows.triggers.delete({
         trigger_id,
       });
@@ -124,6 +131,7 @@ export async function closeVote(
         console.log("Error deleting trigger " + trigger_id);
       }
 
+      // update the vote header datastore to mark the vote as closed
       await client.apps.datastore.put({
         datastore: "vote_header",
         item: {
@@ -179,6 +187,9 @@ export async function closeVote(
   }
 }
 
+/*
+ * returns true if the poll is marked as closed in the datastore, or the header record was deleted by the cleanup trigger
+ */
 export async function isPollClosed(
   uuid: string,
   client: SlackAPIClient,
@@ -195,6 +206,9 @@ export async function isPollClosed(
   return false;
 }
 
+/*
+ * returns the total number of votes and the users who voted for each item
+ */
 // deno-lint-ignore no-explicit-any
 export function voteStatistics(items: Array<any>): any {
   // deno-lint-ignore no-explicit-any
@@ -217,6 +231,9 @@ export function voteStatistics(items: Array<any>): any {
   return statistics;
 }
 
+/*
+ * returns the blocks for the poll message
+ */
 export function messageBlocks(
   // deno-lint-ignore no-explicit-any
   inputs: any,
@@ -257,6 +274,7 @@ export function messageBlocks(
   const show_vote_counts = inputs.counts_visibility_during === EVERYONE ||
     (inputs.counts_visibility_after === EVERYONE && isPollClosed);
 
+  // add the poll options, with voting buttons if the poll is open
   for (let i = 0; i < inputs.options.length; i++) {
     const voters = statistics["item_" + (i + 1)] || [];
     const voterNames = voters.map((voter: string) => {
@@ -297,6 +315,7 @@ export function messageBlocks(
     }
   }
 
+  // "view your votes" button
   if (!isPollClosed) {
     blocks.push({
       type: "actions",
@@ -314,6 +333,7 @@ export function messageBlocks(
     });
   }
 
+  // context line at bottom: vote closed, votes count, create new poll shortcut
   const totalVotes = statistics.totalVotes || 0;
   const votePlural = totalVotes === 1 ? "vote" : "votes";
   const totalMessage = (isPollClosed ? "Poll closed. " : "") +
@@ -334,6 +354,10 @@ export function messageBlocks(
   return blocks;
 }
 
+/*
+ * similar to the message blocks, but for the results message if it needs to be sent to poll creator
+ * at the end of the poll, or displayed in a modal during the poll when creator clicks "Check votes"
+ */
 export function resultsBlocks(
   title: string,
   options: Array<string>,

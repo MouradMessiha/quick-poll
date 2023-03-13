@@ -15,6 +15,9 @@ export const ScheduledCleanup = DefineFunction({
   },
 });
 
+/*
+ * This function is called by a daily trigger to clean up all closed votes from the datastore.
+ */
 export default SlackFunction(
   ScheduledCleanup,
   async ({ client }) => {

@@ -1,22 +1,9 @@
-# Deno Hello World Slack App
+# Deno Poll Slack App
 
-This sample app demonstrates how to use a function, workflow, and trigger to
-send a greeting to channel.
-
-**Guide Outline**:
-
-- [Setup](#setup)
-  - [Install the Slack CLI](#install-the-slack-cli)
-  - [Clone the Template](#clone-the-template)
-- [Create a Link Trigger](#create-a-link-trigger)
-- [Running Your Project Locally](#running-your-project-locally)
-- [Testing](#testing)
-- [Deploying Your App](#deploying-your-app)
-  - [Viewing Activity Logs](#viewing-activity-logs)
-- [Project Structure](#project-structure)
-- [Resources](#resources)
-
----
+This app allows creating a poll in any public channel.
+It doesn't work properly in private direct messages: In multi user direct messaging,
+the poll message can't be updated. In single user direct messaging it can be updated
+but there is not much use for a poll when there are only 2 users in the chat.
 
 ## Setup
 
@@ -27,27 +14,18 @@ requires any of [the Slack paid plans](https://slack.com/pricing).
 
 ### Install the Slack CLI
 
-To use this sample, you first need to install and configure the Slack CLI.
-Step-by-step instructions can be found in our
+Install and configure the Slack CLI.
+Step-by-step instructions can be found in
 [Quickstart Guide](https://api.slack.com/future/quickstart).
 
-### Clone the Sample
+### Clone the Repository
 
 Start by cloning this repository:
-
-```zsh
-# Clone this project onto your machine
-$ slack create my-app -t slack-samples/deno-hello-world
-
-# Change into this project directory
-$ cd my-app
-```
 
 ## Create a Link Trigger
 
 [Triggers](https://api.slack.com/future/triggers) are what cause Workflows to
-run. These Triggers can be invoked by a user, or automatically as a response to
-an event within Slack.
+run.
 
 A [Link Trigger](https://api.slack.com/future/triggers/link) is a type of
 Trigger that generates a **Shortcut URL** which, when posted in a channel or
@@ -61,11 +39,11 @@ that Shortcut URLs will be different across each workspace, as well as between
 the Workspace that you'd like to create the Trigger in. Each Workspace has a
 development version (denoted by `(dev)`), as well as a deployed version.
 
-To create a Link Trigger for the Workflow in this sample, run the following
+To create a Link Trigger for the Workflow, run the following
 command:
 
 ```zsh
-$ slack trigger create --trigger-def triggers/greeting_trigger.ts
+$ slack trigger create --trigger-def triggers/poll_trigger.ts
 ```
 
 After selecting a Workspace, the output provided will include the Link Trigger
@@ -91,20 +69,24 @@ Connected, awaiting events
 
 Once running, click the
 [previously created Shortcut URL](#create-a-link-trigger) associated with the
-`(dev)` version of your app. This should start the included sample Workflow.
+`(dev)` version of your app. This should start the Workflow.
 
 To stop running locally, press `<CTRL> + C` to end the process.
 
 ## Testing
 
-For an example of how to test a function, see
-`functions/greeting_function_test.ts`. Test filenames should be suffixed with
-`_test`.
-
 Run all tests with `deno test`:
 
 ```zsh
 $ deno test
+```
+
+## Linting
+
+Run linting with `deno lint`:
+
+```zsh
+$ deno lint
 ```
 
 ## Deploying Your App

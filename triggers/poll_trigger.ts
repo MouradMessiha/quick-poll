@@ -1,6 +1,9 @@
 import { Trigger } from "deno-slack-api/types.ts";
 import PollWorkflow from "../workflows/poll_workflow.ts";
 
+/*
+ * This trigger is called by a shortcut to start a new poll.
+ */
 const pollTrigger: Trigger<typeof PollWorkflow.definition> = {
   type: "shortcut",
   name: "start a poll",

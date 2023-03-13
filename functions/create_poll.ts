@@ -8,6 +8,12 @@ import {
   UNLIMITED,
 } from "./utils/utils.ts";
 
+/*
+ * This function is used to create a poll in the channel
+ * It opens a view to collect the poll details
+ * It then returns the poll details to the poll function
+ * The poll function then creates the poll
+ */
 export const CreatePoll = DefineFunction({
   callback_id: "create_poll",
   title: "Create a poll",
@@ -83,7 +89,7 @@ export default SlackFunction(
   async ({ inputs, client }) => {
     await client.views.open({
       interactivity_pointer: inputs.interactivity.interactivity_pointer,
-      view: viewObject({ "values": {} }, inputs.channel_id),
+      view: viewObject({ "values": {} }, inputs.channel_id), // initial view with empty state
     });
     return {
       completed: false,
@@ -92,6 +98,9 @@ export default SlackFunction(
 ).addViewSubmissionHandler(
   "create_poll_view",
   async ({ inputs, client, body, view }) => {
+    /*
+     * This is the handler for when the user submits the modal
+     */
     const title = view.state.values.topic.topic.value
       .trim();
     const options: string[] = view.state.values.options.options.value
@@ -119,6 +128,7 @@ export default SlackFunction(
       0;
     const end_date_time = exact_end_date_time - (exact_end_date_time % 60);
 
+    // validate the inputs
     // deno-lint-ignore no-explicit-any
     const errors: any = {};
     let hasErrors = false;
@@ -140,15 +150,18 @@ export default SlackFunction(
       errors.end_date_time = "Poll end date and time must be in the future";
       hasErrors = true;
     }
-
+    // prevent submission with invalid inputs
     if (hasErrors) {
       return {
         response_action: "errors",
         errors: errors,
       };
     }
+
+    // create a unique id for the poll
     const uuid = inputs.creator_user_id + Date.now();
 
+    // create the poll header record in the datastore
     await client.apps.datastore.put({
       datastore: "vote_header",
       item: {
@@ -158,6 +171,7 @@ export default SlackFunction(
       },
     });
 
+    // pass the poll data to the next function
     const outputs = {
       uuid,
       title,
@@ -179,6 +193,7 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   "visibility_selection",
   async ({ body, client, inputs }) => {
+    // handler to dynamically update the view based on which results visiblity options were selected
     await client.views.update({
       interactivity_pointer: body.interactivity.interactivity_pointer,
       view_id: body.view.id,
@@ -188,6 +203,7 @@ export default SlackFunction(
 ).addBlockActionsHandler(
   "vote_limit_selection",
   async ({ body, client, inputs }) => {
+    // hamdler to dynamically update the view based on which voting limits options were selected
     await client.views.update({
       interactivity_pointer: body.interactivity.interactivity_pointer,
       view_id: body.view.id,
@@ -196,11 +212,17 @@ export default SlackFunction(
   },
 );
 
+/*
+ * Compose the modal view based on the current state of the inputs
+ */
 // deno-lint-ignore no-explicit-any
 function viewObject(state: any, channel: string) {
   const blocks = [];
+  // poll title
   blocks.push(multiline_input("topic", "topic", "Topic"));
+  // poll items
   blocks.push(multiline_input("options", "options", "Options (one per line)"));
+  // channel for the poll
   blocks.push({
     "type": "input",
     "block_id": "channel",
@@ -214,6 +236,7 @@ function viewObject(state: any, channel: string) {
       "initial_channel": channel,
     },
   });
+  // options for results visiblity during the poll
   blocks.push(
     menu_select(
       "names_visibility_during",
@@ -283,6 +306,8 @@ function viewObject(state: any, channel: string) {
       );
     }
   }
+
+  // option for voting limits
   blocks.push(
     menu_select(
       "votes_per_user",
@@ -298,6 +323,7 @@ function viewObject(state: any, channel: string) {
   const votes_per_user =
     state.values.votes_per_user?.vote_limit_selection?.selected_option?.value ||
     UNLIMITED;
+  // if the voting limit is limited, add a field to enter the limit
   if (votes_per_user === LIMITED) {
     blocks.push({
       "type": "input",
@@ -315,6 +341,7 @@ function viewObject(state: any, channel: string) {
       },
     });
   }
+  // poll end date and time
   blocks.push({
     "type": "input",
     "block_id": "end_date_time",
@@ -328,7 +355,7 @@ function viewObject(state: any, channel: string) {
       "text": "Poll end date and time",
     },
   });
-
+  // return the view object
   return {
     "type": "modal",
     "title": {
@@ -348,6 +375,7 @@ function viewObject(state: any, channel: string) {
   };
 }
 
+// helper function to create block for multiline input
 function multiline_input(
   block_id: string,
   action_id: string,
@@ -368,6 +396,7 @@ function multiline_input(
   };
 }
 
+// helper function to create block for a dropdown menu
 function menu_select(
   block_id: string,
   action_id: string,
@@ -399,6 +428,7 @@ function menu_select(
   };
 }
 
+// helper function to create an option in a drop down menu
 function menu_option(text: string, value: string) {
   return {
     "text": {
