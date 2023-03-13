@@ -13,9 +13,9 @@ import { ScheduledCleanup } from "./functions/scheduledCleanup.ts";
 import ScheduledCleanupWorkflow from "./workflows/scheduledCleanup.ts";
 
 export default Manifest({
-  name: "Polls",
-  description: "An app that handles polls in Slack channels",
-  icon: "assets/default_new_app_icon.png",
+  name: "Poll",
+  description: "An app that handles polls",
+  icon: "assets/ballot.png",
   workflows: [PollWorkflow, ScheduledCloseWorkflow, ScheduledCleanupWorkflow],
   functions: [CreatePoll, PollFunction, ScheduledClose, ScheduledCleanup],
   outgoingDomains: [],

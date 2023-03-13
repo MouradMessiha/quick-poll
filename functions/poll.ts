@@ -81,6 +81,7 @@ export default SlackFunction(
       blocks: blocks,
       unfurl_links: false,
       unfurl_media: false,
+      icon_emoji: ":ballot_box_with_ballot:",
       metadata: {
         event_type: "quick_poll",
         event_payload: {
