@@ -339,7 +339,7 @@ export function messageBlocks(
   const totalMessage = (isPollClosed ? "Poll closed. " : "") +
     (totalVotes ? totalVotes + ` ${votePlural} received.` : "");
   const contextMessage = (totalMessage + "\n").trimStart() +
-    "<https://slack.com/shortcuts/Ft04GET4BKGF/aba6a4f75dbeb9da745d0686227b228e|Create a new poll>";
+    "<https://slack.com/shortcuts/Ft04TXMFHW10/2530f45cb278aac6cdca13fae564fdc4|Create a new poll>";
 
   blocks.push({
     type: "context",

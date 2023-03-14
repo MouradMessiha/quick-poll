@@ -1,1 +1,11 @@
-{}
+{
+  "apps": {
+    "pmdigital": {
+      "name": "pmdigital",
+      "app_id": "A04UA9K48BT",
+      "team_id": "T02UQCEGV",
+      "IsDev": false
+    }
+  },
+  "default": "pmdigital"
+}
